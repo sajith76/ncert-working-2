@@ -202,9 +202,11 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleActionSelect(
-                        AI_ACTIONS.find((a) => a.id === selectedAction)
-                      )}
+                      onClick={() =>
+                        handleActionSelect(
+                          AI_ACTIONS.find((a) => a.id === selectedAction)
+                        )
+                      }
                     >
                       Try Again
                     </Button>
@@ -212,8 +214,14 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
                 ) : (
                   <ScrollArea className="h-full">
                     <div className="pr-4">
-                      <div className="prose prose-sm max-w-none dark:prose-invert prose-p:text-black dark:prose-p:text-white prose-strong:text-black dark:prose-strong:text-white prose-strong:font-bold prose-em:italic prose-li:text-black dark:prose-li:text-white">
-                        <ReactMarkdown>{response}</ReactMarkdown>
+                      <div
+                        className="max-w-none text-base leading-relaxed 
+     text-black
+     [&_strong]:font-bold 
+     [&_em]:italic 
+     [&_li]:list-disc [&_li]:ml-4"
+                      >
+                        <ReactMarkdown color="black">{response}</ReactMarkdown>
                       </div>
                     </div>
                   </ScrollArea>
