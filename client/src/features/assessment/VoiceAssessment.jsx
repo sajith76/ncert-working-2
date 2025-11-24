@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Mic, MicOff, Volume2, CheckCircle, Loader2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { Progress } from "../../components/ui/progress";
@@ -324,7 +325,9 @@ export default function VoiceAssessment({ currentLesson, onComplete, onClose }) 
 
                 {/* Feedback */}
                 <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-lg">
-                  <p className="text-sm text-foreground leading-relaxed">{evaluationResult.feedback}</p>
+                  <div className="prose prose-sm max-w-none dark:prose-invert prose-p:text-black dark:prose-p:text-white prose-strong:text-black dark:prose-strong:text-white prose-strong:font-bold">
+                    <ReactMarkdown>{evaluationResult.feedback}</ReactMarkdown>
+                  </div>
                 </div>
               </div>
             )}
@@ -467,9 +470,9 @@ export default function VoiceAssessment({ currentLesson, onComplete, onClose }) 
                         </div>
                         
                         {/* Hint (NO direct answer) */}
-                        <p className="text-xs text-muted-foreground italic pl-2 border-l-2 border-primary/30">
-                          Hint: {qs.hint}
-                        </p>
+                        <div className="text-xs italic pl-2 border-l-2 border-primary/30 prose prose-xs max-w-none dark:prose-invert prose-p:text-gray-700 dark:prose-p:text-gray-300">
+                          <ReactMarkdown>{"Hint: " + qs.hint}</ReactMarkdown>
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -510,9 +513,9 @@ export default function VoiceAssessment({ currentLesson, onComplete, onClose }) 
                           <span className="text-orange-600 text-xs font-bold mt-0.5">
                             {idx + 1}
                           </span>
-                          <span className="text-xs text-foreground flex-1">
-                            {topic}
-                          </span>
+                          <div className="flex-1 prose prose-xs max-w-none dark:prose-invert prose-p:text-black dark:prose-p:text-white">
+                            <ReactMarkdown>{topic}</ReactMarkdown>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -528,9 +531,11 @@ export default function VoiceAssessment({ currentLesson, onComplete, onClose }) 
                     </h4>
                     <div className="space-y-1">
                       {evaluationResult.strengths.map((strength, idx) => (
-                        <div key={idx} className="flex items-start gap-2 text-xs text-foreground">
+                        <div key={idx} className="flex items-start gap-2">
                           <span className="text-emerald-600 mt-0.5 font-bold">+</span>
-                          <span className="flex-1">{strength}</span>
+                          <div className="flex-1 prose prose-xs max-w-none dark:prose-invert prose-p:text-black dark:prose-p:text-white">
+                            <ReactMarkdown>{strength}</ReactMarkdown>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -546,9 +551,11 @@ export default function VoiceAssessment({ currentLesson, onComplete, onClose }) 
                     </h4>
                     <div className="space-y-1">
                       {evaluationResult.improvements.map((improvement, idx) => (
-                        <div key={idx} className="flex items-start gap-2 text-xs text-foreground">
+                        <div key={idx} className="flex items-start gap-2">
                           <span className="text-blue-600 mt-0.5 font-bold">•</span>
-                          <span className="flex-1">{improvement}</span>
+                          <div className="flex-1 prose prose-xs max-w-none dark:prose-invert prose-p:text-black dark:prose-p:text-white">
+                            <ReactMarkdown>{improvement}</ReactMarkdown>
+                          </div>
                         </div>
                       ))}
                     </div>

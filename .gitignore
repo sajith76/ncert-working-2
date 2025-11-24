@@ -1,4 +1,4 @@
-# ==================== PYTHON ====================
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -7,86 +7,47 @@ __pycache__/
 env/
 venv/
 ENV/
-env.bak/
-venv.bak/
 *.egg-info/
 dist/
 build/
 .pytest_cache/
-.mypy_cache/
-.dmypy.json
-dmypy.json
-*.pyc
-instance/
 
-# ==================== NODE / REACT ====================
+# Node
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-dist/
-dist-ssr/
-*.local
 
-# ==================== ENVIRONMENT VARIABLES (IMPORTANT!) ====================
+# Environment Variables
 .env
 .env.local
 .env.*.local
 *.env
-.env.production
-.env.development
-.env.test
 
-# ==================== API KEYS & SECRETS ====================
-**/config/secrets.py
-**/config/local_settings.py
-credentials.json
-service-account.json
-*.pem
-*.key
-
-# ==================== IDE ====================
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# ==================== OS ====================
 .DS_Store
-Thumbs.db
-desktop.ini
-*.tmp
-*.temp
 
-# ==================== BUILD OUTPUTS ====================
+# Build outputs
+dist/
 build/
+*.log
+
+# Test coverage
 coverage/
 .coverage
 htmlcov/
+
+# Temporary files
+*.tmp
+*.temp
 .cache/
 
-# ==================== LOGS ====================
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# ==================== DATABASE ====================
-*.db
-*.sqlite
-*.sqlite3
-
-# ==================== PROJECT SPECIFIC ====================
-# PDFs (if not needed in repo)
-# client/src/assets/*.pdf
-
-# Backup files
-*.bak
-*.backup
-
-# Test files
-test-results/
-playwright-report/
+# OS
+Thumbs.db
+desktop.ini

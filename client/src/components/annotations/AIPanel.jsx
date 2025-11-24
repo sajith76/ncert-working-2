@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Sparkles, Lightbulb, FileText, BookOpen, MessageSquare } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../ui/sheet";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -195,9 +196,9 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
                   </div>
                 ) : (
                   <ScrollArea className="h-full">
-                    <div className="prose prose-sm max-w-none pr-4">
-                      <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                        {response}
+                    <div className="pr-4">
+                      <div className="prose prose-sm max-w-none dark:prose-invert prose-p:text-black dark:prose-p:text-white prose-strong:text-black dark:prose-strong:text-white prose-strong:font-bold prose-em:italic prose-li:text-black dark:prose-li:text-white">
+                        <ReactMarkdown>{response}</ReactMarkdown>
                       </div>
                     </div>
                   </ScrollArea>
