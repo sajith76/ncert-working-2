@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, Lightbulb, FileText, BookOpen, MessageSquare } from "lucide-react";
+import { Sparkles, FileText, BookOpen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import {
   Sheet,
@@ -16,39 +16,25 @@ import { chatService } from "../../services/api";
 
 const AI_ACTIONS = [
   {
-    id: "simple",
-    label: "Simplify",
-    icon: Lightbulb,
-    description: "Make it easier to understand",
+    id: "define",
+    label: "Define",
+    icon: FileText,
+    description: "Get clear definitions and meanings",
     color: "text-blue-600",
   },
   {
-    id: "meaning",
-    label: "Meaning",
-    icon: FileText,
-    description: "Get definitions and meanings",
+    id: "stick_flow",
+    label: "Stick Flow",
+    icon: Sparkles,
+    description: "Visual flow diagram of the concept",
     color: "text-purple-600",
   },
   {
-    id: "example",
-    label: "Examples",
+    id: "elaborate",
+    label: "Elaborate",
     icon: BookOpen,
-    description: "Provide practical examples",
+    description: "Detailed explanation with examples",
     color: "text-green-600",
-  },
-  {
-    id: "story",
-    label: "Story",
-    icon: MessageSquare,
-    description: "Explain as a story",
-    color: "text-orange-600",
-  },
-  {
-    id: "summary",
-    label: "Summary",
-    icon: Sparkles,
-    description: "Get a concise summary",
-    color: "text-pink-600",
   },
 ];
 
@@ -59,12 +45,14 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
   const [selectedAction, setSelectedAction] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [response, setResponse] = useState("");
+  const [imageUrl, setImageUrl] = useState(null); // For Stick Flow images
   const [error, setError] = useState(null);
 
   const handleActionSelect = async (action) => {
     setSelectedAction(action.id);
     setIsProcessing(true);
     setError(null);
+    setImageUrl(null); // Reset image
 
     try {
       console.log("🚀 Calling backend API...", {
@@ -73,17 +61,30 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
         mode: action.id
       });
 
-      // Call real backend API
-      const result = await chatService.getExplanation(
-        selectedText?.text || "",  // text
-        action.id,                 // mode
-        user.classLevel,           // classLevel
-        user.preferredSubject || "Social Science",  // subject
-        currentLesson?.number || 1  // chapter
-      );
+      // Special handling for Stick Flow (image generation)
+      if (action.id === "stick_flow") {
+        const result = await chatService.getStickFlow(
+          selectedText?.text || "",
+          user.classLevel,
+          user.preferredSubject || "Social Science",
+          currentLesson?.number || 1
+        );
+        console.log("✅ Stick Flow response:", result);
+        setImageUrl(result.imageUrl);
+        setResponse(result.description || "Visual flow diagram created");
+      } else {
+        // Regular chat for Define and Elaborate
+        const result = await chatService.getExplanation(
+          selectedText?.text || "",
+          action.id,
+          user.classLevel,
+          user.preferredSubject || "Social Science",
+          currentLesson?.number || 1
+        );
+        console.log("✅ Backend response received:", result);
+        setResponse(result.answer);
+      }
 
-      console.log("✅ Backend response received:", result);
-      setResponse(result.answer);
       setIsProcessing(false);
     } catch (err) {
       console.error("❌ AI API Error:", err);
@@ -113,6 +114,7 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
   const handleClose = () => {
     setSelectedAction(null);
     setResponse("");
+    setImageUrl(null);
     onClose();
   };
 
@@ -192,7 +194,7 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
                     <div className="text-center space-y-2">
                       <Sparkles className="h-8 w-8 animate-pulse text-violet-600 mx-auto" />
                       <p className="text-sm text-muted-foreground">
-                        AI is thinking...
+                        AI is {selectedAction === 'stick_flow' ? 'creating flow diagram' : 'thinking'}...
                       </p>
                     </div>
                   </div>
@@ -211,6 +213,18 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
                       Try Again
                     </Button>
                   </div>
+                ) : imageUrl ? (
+                  /* Stick Flow Image Display */
+                  <div className="space-y-3">
+                    <img 
+                      src={imageUrl} 
+                      alt="Concept Flow Diagram" 
+                      className="w-full rounded-lg border shadow-sm"
+                    />
+                    {response && (
+                      <p className="text-sm text-muted-foreground">{response}</p>
+                    )}
+                  </div>
                 ) : (
                   <ScrollArea className="h-full">
                     <div className="pr-4">
@@ -228,7 +242,7 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
                 )}
               </div>
 
-              {!isProcessing && response && (
+              {!isProcessing && (response || imageUrl) && (
                 <div className="flex gap-2">
                   <Button
                     variant="default"

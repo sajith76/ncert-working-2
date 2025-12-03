@@ -19,6 +19,7 @@ import NotesPanel from "../annotations/NotesPanel";
 import HistoryPanel from "../annotations/HistoryPanel";
 import HighlightOverlay from "../annotations/HighlightOverlay";
 import VoiceAssessment from "../assessment/VoiceAssessment";
+import StudentChatbot from "../annotations/StudentChatbot";
 import { useState as ReactUseState } from "react";
 
 /**
@@ -374,6 +375,9 @@ export default function PDFViewer({ pdfUrl, currentLesson }) {
           </div>
         </div>
       </div>
+
+      {/* Student Chatbot - Floating on bottom right */}
+      <StudentChatbot currentLesson={currentLesson} />
     </div>
   );
 }

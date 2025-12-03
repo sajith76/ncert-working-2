@@ -76,6 +76,23 @@ class GeminiService:
             logger.error(f"❌ Gemini explanation failed: {e}")
             raise
     
+    def generate_response(self, prompt: str) -> str:
+        """
+        Generate a simple text response from Gemini.
+        
+        Args:
+            prompt: The prompt to send to Gemini
+        
+        Returns:
+            Generated text response
+        """
+        try:
+            response = self.chat_model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            logger.error(f"❌ Gemini response generation failed: {e}")
+            raise
+    
     def _build_prompt(self, context: str, question: str, mode: str, class_level: int = 6) -> str:
         """Build prompt based on mode and class level to generate helpful answers."""
         
@@ -110,6 +127,23 @@ STUDENT'S QUESTION:
 """
         
         mode_instructions = {
+            "define": f"""
+MODE: DEFINE/MEANING (Class {class_level})
+- Provide clear, concise definitions
+- Explain key terms in simple language
+- Give the meaning from the textbook context
+- Use examples from context if available
+- Language level: {language_complexity.get(class_level, "simple and clear")}
+""",
+            "elaborate": f"""
+MODE: ELABORATE (Class {class_level})
+- Provide detailed, comprehensive explanation
+- Break down complex concepts step-by-step
+- Include examples, applications, and connections
+- Use bullet points or paragraphs as appropriate
+- Make it thorough but easy to understand
+- Language level: {language_complexity.get(class_level, "detailed but clear")}
+""",
             "simple": f"""
 MODE: SIMPLE EXPLANATION (Class {class_level})
 - Break down complex ideas into simple parts
@@ -149,7 +183,7 @@ MODE: SUMMARY (Class {class_level})
 """
         }
         
-        return base_instruction + mode_instructions.get(mode, mode_instructions["simple"])
+        return base_instruction + mode_instructions.get(mode, mode_instructions["elaborate"])
     
     def generate_mcqs(
         self, 

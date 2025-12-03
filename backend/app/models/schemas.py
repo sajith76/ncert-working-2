@@ -16,7 +16,7 @@ class ChatRequest(BaseModel):
     subject: str = Field(..., description="Subject name (e.g., Geography, History)")
     chapter: int = Field(..., ge=1, description="Chapter number")
     highlight_text: str = Field(..., min_length=1, description="Text highlighted by student")
-    mode: Literal["simple", "meaning", "story", "example", "summary"] = Field(
+    mode: Literal["define", "elaborate", "simple", "meaning", "story", "example", "summary"] = Field(
         ..., description="Explanation mode requested by student"
     )
 

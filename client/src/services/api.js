@@ -15,7 +15,7 @@ export const chatService = {
   /**
    * Get AI explanation for selected text
    * @param {string} text - The selected text to explain
-   * @param {string} mode - Explanation mode (simple/meaning/example/story/summary)
+   * @param {string} mode - Explanation mode (define/elaborate)
    * @param {number} classLevel - User's class level (5-10)
    * @param {string} subject - Subject name
    * @param {number} chapter - Chapter number
@@ -29,7 +29,7 @@ export const chatService = {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          highlight_text: text,  // ✅ Changed from 'query' to 'highlight_text'
+          highlight_text: text,
           mode: mode,
           class_level: classLevel,
           subject: subject,
@@ -45,10 +45,84 @@ export const chatService = {
       const data = await response.json();
       return {
         answer: data.answer,
-        sources: data.source_chunks || [],  // ✅ Changed from 'sources' to 'source_chunks'
+        sources: data.source_chunks || [],
       };
     } catch (error) {
       console.error("Chat API Error:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get Stick Flow visual diagram
+   * @param {string} text - The selected text to create flow for
+   * @param {number} classLevel - User's class level (5-10)
+   * @param {string} subject - Subject name
+   * @param {number} chapter - Chapter number
+   * @returns {Promise<{imageUrl: string, description: string}>}
+   */
+  async getStickFlow(text, classLevel, subject, chapter) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chat/stick-flow`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          highlight_text: text,
+          class_level: classLevel,
+          subject: subject,
+          chapter: chapter,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Stick Flow API Error: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Stick Flow API Error:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Student chatbot - Open-ended questions with RAG
+   * @param {string} question - Student's question
+   * @param {number} classLevel - User's class level (5-10)
+   * @param {string} subject - Subject name
+   * @param {number} chapter - Chapter number
+   * @returns {Promise<{answer: string, sources: array}>}
+   */
+  async studentChat(question, classLevel, subject, chapter) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chat/student`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question: question,
+          class_level: classLevel,
+          subject: subject,
+          chapter: chapter,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Student Chat API Error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return {
+        answer: data.answer,
+        sources: data.source_chunks || [],
+      };
+    } catch (error) {
+      console.error("Student Chat API Error:", error);
       throw error;
     }
   },
