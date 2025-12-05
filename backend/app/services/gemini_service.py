@@ -127,6 +127,16 @@ STUDENT'S QUESTION:
 """
         
         mode_instructions = {
+            "quick": f"""
+MODE: QUICK/EXAM-STYLE (Class {class_level})
+- Provide clear, direct answer
+- Focus on key information from the textbook
+- Well-structured with bullet points if explaining a topic
+- If it's a simple question: 2-3 sentences
+- If explaining a concept/topic: 1-2 paragraphs with key points
+- Get straight to the point but cover the main aspects
+- Language level: {language_complexity.get(class_level, "simple and clear")}
+""",
             "define": f"""
 MODE: DEFINE/MEANING (Class {class_level})
 - Provide clear, concise definitions
@@ -347,3 +357,5 @@ Provide evaluation in JSON format:"""
 
 # Global Gemini service instance
 gemini_service = GeminiService()
+
+

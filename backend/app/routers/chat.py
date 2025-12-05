@@ -4,6 +4,7 @@ Chat Router - RAG-based chat endpoints.
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from typing import Literal
 from app.models.schemas import ChatRequest, ChatResponse, ErrorResponse
 from app.services.rag_service import rag_service
 from app.services.gemini_service import gemini_service
@@ -20,25 +21,25 @@ router = APIRouter(
 @router.post("/", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
-    RAG-based chat endpoint.
+    RAG-based chat endpoint with progressive learning.
     
-    Retrieves relevant context from Pinecone based on class, subject, and chapter,
-    then generates an explanation using Gemini based on the selected mode.
+    Retrieves relevant context from Pinecone based on class, subject, and chapter.
+    Uses progressive learning to access foundational content from previous classes.
     
     **Modes:**
-    - `define`: Clear definitions and meanings
-    - `elaborate`: Detailed explanation with examples and context
+    - `define`: Clear definitions (quick mode - current + previous class)
+    - `elaborate`: Detailed explanation with examples (quick mode)
     """
     try:
         logger.info(f"Chat request: Class {request.class_level}, {request.subject}, Ch. {request.chapter}, Mode: {request.mode}")
         
-        # Query RAG system
-        answer, source_chunks = rag_service.query_with_rag(
+        # Query RAG system with progressive learning
+        answer, source_chunks = rag_service.query_with_rag_progressive(
             query_text=request.highlight_text,
             class_level=request.class_level,
             subject=request.subject,
             chapter=request.chapter,
-            mode=request.mode
+            mode="quick"  # Use quick mode (current + previous class)
         )
         
         return ChatResponse(
@@ -146,39 +147,63 @@ Focus on the steps and connections."""
 # ==================== STUDENT CHATBOT ENDPOINT ====================
 
 class StudentChatRequest(BaseModel):
-    """Request schema for student chatbot."""
+    """Request schema for student chatbot with Quick/DeepDive modes."""
     question: str = Field(..., description="Student's question")
     class_level: int = Field(..., ge=5, le=10, description="Class level (5-10)")
     subject: str = Field(..., description="Subject name")
     chapter: int = Field(..., ge=1, description="Chapter number")
+    mode: Literal["quick", "deepdive"] = Field("quick", description="Chat mode: quick (exam-style) or deepdive (comprehensive)")
 
 
 @router.post("/student", response_model=ChatResponse)
 async def student_chatbot(request: StudentChatRequest):
     """
-    Open student chatbot endpoint with RAG.
+    Open student chatbot endpoint with Quick/DeepDive modes.
     
-    Handles any student question about the chapter. Uses Pinecone RAG to retrieve
-    relevant content and formats responses appropriately. Strictly enforces that
-    only textbook content is used - questions outside the book are politely declined.
+    **Quick Mode**: Direct answers from current + previous class textbook content.
+    **DeepDive Mode**: Comprehensive answers from ALL prerequisite classes + web content.
+    
+    Uses progressive learning architecture - automatically accesses foundational content
+    from earlier classes to help build understanding. For example, Class 11 students
+    can access Class 9-10 prerequisites automatically.
     """
     try:
-        logger.info(f"Student chat: Class {request.class_level}, {request.subject}, Ch. {request.chapter}")
+        logger.info(f"Student chat ({request.mode}): Class {request.class_level}, {request.subject}, Ch. {request.chapter}")
         logger.info(f"Question: {request.question[:100]}...")
         
-        # Use elaborate mode for comprehensive answers
-        answer, source_chunks = rag_service.query_with_rag(
-            query_text=request.question,
-            class_level=request.class_level,
-            subject=request.subject,
-            chapter=request.chapter,
-            mode="elaborate",  # Detailed explanation mode
-            top_k=15  # More context for better answers
-        )
+        if request.mode == "quick":
+            # Quick mode: Progressive learning (current + previous class)
+            answer, source_chunks = rag_service.query_with_rag_progressive(
+                query_text=request.question,
+                class_level=request.class_level,
+                subject=request.subject,
+                chapter=request.chapter,
+                mode="quick",  # Includes current + previous class
+                top_k=10,
+                min_score=0.60  # Reasonable threshold for progressive queries
+            )
+            
+            # Check if answer is relevant based on source scores
+            if not source_chunks or len(source_chunks) < 2:
+                return ChatResponse(
+                    answer=f"I couldn't find a direct answer to this in your textbook. However, your textbook covers related topics in Chapter {request.chapter} of {request.subject}. Try asking about specific concepts from the chapter!",
+                    used_mode="quick",
+                    source_chunks=[]
+                )
+            
+        else:
+            # DeepDive mode: Progressive learning (ALL prerequisite classes) + web content
+            answer, source_chunks = rag_service.query_with_rag_deepdive(
+                query_text=request.question,
+                class_level=request.class_level,
+                subject=request.subject,
+                chapter=request.chapter,
+                top_k=20  # More chunks for comprehensive multi-class answers
+            )
         
         return ChatResponse(
             answer=answer,
-            used_mode="elaborate",
+            used_mode=request.mode,
             source_chunks=source_chunks
         )
     

@@ -1,23 +1,23 @@
 import React, { useState, useRef, useEffect } from "react";
-import { MessageCircle, Send, X, Sparkles, Minimize2 } from "lucide-react";
+import { MessageCircle, Send, X, Sparkles, Minimize2, Zap, Brain } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import useUserStore from "../../stores/userStore";
 import { chatService } from "../../services/api";
-import ReactMarkdown from "react-markdown";
 
 /**
  * Student Chatbot - Floating chatbot for open-ended questions
- * Appears on PDF reader page, uses RAG with Pinecone
+ * Two modes: Quick (exam-style) and DeepDive (comprehensive with web content)
  */
 export default function StudentChatbot({ currentLesson }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [chatMode, setChatMode] = useState("quick"); // "quick" or "deepdive"
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "👋 Hi! I'm your study assistant. Ask me anything about this chapter!",
+      content: "👋 Hi! I'm your study assistant.\n\n**Quick Mode**: Direct, exam-style answers from your textbook.\n**DeepDive Mode**: Comprehensive explanations with additional context and related topics.\n\nChoose a mode and ask me anything!",
       timestamp: new Date(),
     },
   ]);
@@ -33,6 +33,18 @@ export default function StudentChatbot({ currentLesson }) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const handleModeChange = (mode) => {
+    setChatMode(mode);
+    const modeMessage = {
+      role: "assistant",
+      content: mode === "quick" 
+        ? "✅ **Quick Mode activated!** I'll give you direct, exam-style answers from your textbook."
+        : "✅ **DeepDive Mode activated!** I'll provide comprehensive explanations covering all aspects of the topic, including background context and related information.",
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, modeMessage]);
+  };
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isTyping) return;
@@ -52,7 +64,8 @@ export default function StudentChatbot({ currentLesson }) {
         userMessage.content,
         user.classLevel || 10,
         user.preferredSubject || "Social Science",
-        currentLesson?.number || 1
+        currentLesson?.number || 1,
+        chatMode // Pass the mode to backend
       );
 
       const assistantMessage = {
@@ -60,6 +73,7 @@ export default function StudentChatbot({ currentLesson }) {
         content: result.answer,
         timestamp: new Date(),
         sources: result.sources,
+        mode: chatMode,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -100,18 +114,9 @@ export default function StudentChatbot({ currentLesson }) {
             <MessageCircle className="w-8 h-8 text-white" />
             
             {/* Sparkle indicator */}
-            <span className="absolute -top-1 -right-1 flex h-5 w-5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-5 w-5 bg-yellow-500">
-                <Sparkles className="w-3 h-3 text-white m-auto" />
-              </span>
-            </span>
-          </div>
-
-          {/* Tooltip */}
-          <div className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            Ask me anything!
-            <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center animate-bounce">
+              <Sparkles className="w-3 h-3 text-white" />
+            </div>
           </div>
         </div>
       </button>
@@ -132,7 +137,9 @@ export default function StudentChatbot({ currentLesson }) {
           </div>
           <div className="text-white">
             <h3 className="font-semibold text-sm">Study Assistant</h3>
-            <p className="text-xs text-white/80">Always here to help</p>
+            <p className="text-xs text-white/80">
+              {chatMode === "quick" ? "Quick Mode" : "DeepDive Mode"}
+            </p>
           </div>
         </div>
         
@@ -158,8 +165,34 @@ export default function StudentChatbot({ currentLesson }) {
 
       {!isMinimized && (
         <>
+          {/* Mode Selector */}
+          <div className="p-3 bg-gray-50 border-b flex gap-2">
+            <button
+              onClick={() => handleModeChange("quick")}
+              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                chatMode === "quick"
+                  ? "bg-violet-600 text-white shadow-md"
+                  : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+              Quick
+            </button>
+            <button
+              onClick={() => handleModeChange("deepdive")}
+              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                chatMode === "deepdive"
+                  ? "bg-violet-600 text-white shadow-md"
+                  : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+              }`}
+            >
+              <Brain className="w-4 h-4" />
+              DeepDive
+            </button>
+          </div>
+
           {/* Messages */}
-          <ScrollArea className="h-[calc(100%-8rem)] p-4">
+          <ScrollArea className="h-[calc(100%-12rem)] p-4">
             <div className="space-y-4">
               {messages.map((message, index) => (
                 <div
@@ -179,16 +212,20 @@ export default function StudentChatbot({ currentLesson }) {
                   >
                     <div className="text-sm leading-relaxed">
                       {message.role === "assistant" ? (
-                        <ReactMarkdown
-                          className="prose prose-sm max-w-none
-                          [&_p]:my-1
-                          [&_ul]:my-2 [&_ul]:ml-4
-                          [&_li]:list-disc
-                          [&_strong]:font-semibold
-                          [&_code]:bg-gray-200 [&_code]:px-1 [&_code]:rounded"
-                        >
-                          {message.content}
-                        </ReactMarkdown>
+                        <div className="whitespace-pre-wrap">
+                          {message.content.split('\n').map((line, idx) => {
+                            // Bold text
+                            if (line.startsWith('**') && line.endsWith('**')) {
+                              return <div key={idx} className="font-semibold my-1">{line.replace(/\*\*/g, '')}</div>;
+                            }
+                            // Bullet points
+                            if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
+                              return <div key={idx} className="ml-4 my-1">• {line.replace(/^[-•]\s*/, '')}</div>;
+                            }
+                            // Regular text
+                            return <div key={idx} className="my-1">{line || <br />}</div>;
+                          })}
+                        </div>
                       ) : (
                         message.content
                       )}
@@ -214,8 +251,8 @@ export default function StudentChatbot({ currentLesson }) {
                   <div className="bg-gray-100 rounded-2xl px-4 py-3">
                     <div className="flex gap-1">
                       <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></span>
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></span>
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.1s]"></span>
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
                     </div>
                   </div>
                 </div>
@@ -232,15 +269,18 @@ export default function StudentChatbot({ currentLesson }) {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ask anything about this chapter..."
+                placeholder={
+                  chatMode === "quick"
+                    ? "Ask a direct question..."
+                    : "Ask anything for deep explanation..."
+                }
+                className="flex-1 rounded-xl border-gray-300 focus:border-violet-500 focus:ring-violet-500"
                 disabled={isTyping}
-                className="flex-1 rounded-full"
               />
               <Button
                 onClick={handleSendMessage}
                 disabled={!inputValue.trim() || isTyping}
-                size="icon"
-                className="rounded-full bg-violet-600 hover:bg-violet-700"
+                className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-700 hover:to-purple-800 text-white px-4"
               >
                 <Send className="h-4 w-4" />
               </Button>

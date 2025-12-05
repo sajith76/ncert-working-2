@@ -94,9 +94,10 @@ export const chatService = {
    * @param {number} classLevel - User's class level (5-10)
    * @param {string} subject - Subject name
    * @param {number} chapter - Chapter number
+   * @param {string} mode - Chat mode: "quick" (exam-style) or "deepdive" (comprehensive)
    * @returns {Promise<{answer: string, sources: array}>}
    */
-  async studentChat(question, classLevel, subject, chapter) {
+  async studentChat(question, classLevel, subject, chapter, mode = "quick") {
     try {
       const response = await fetch(`${API_BASE_URL}/api/chat/student`, {
         method: "POST",
@@ -108,6 +109,7 @@ export const chatService = {
           class_level: classLevel,
           subject: subject,
           chapter: chapter,
+          mode: mode, // Pass mode to backend
         }),
       });
 
