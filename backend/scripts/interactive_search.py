@@ -18,8 +18,8 @@ load_dotenv()
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.services.multimodal.embedder import MultimodalEmbedder
-from app.services.multimodal.uploader import PineconeUploader
+from app.services.multimodal.math.math_embedder import MultimodalEmbedder
+from app.services.multimodal.math.math_uploader import PineconeUploader
 import logging
 
 # Configure logging

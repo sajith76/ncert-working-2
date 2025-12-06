@@ -14,11 +14,11 @@ import time
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from app.services.multimodal.pdf_processor import PDFProcessor
-from app.services.multimodal.formula_extractor import FormulaExtractor
-from app.services.multimodal.chunker import MathChunker
-from app.services.multimodal.embedder import MultimodalEmbedder
-from app.services.multimodal.uploader import PineconeUploader
+from app.services.multimodal.math.math_pdf_processor import PDFProcessor
+from app.services.multimodal.math.math_formula_extractor import FormulaExtractor
+from app.services.multimodal.math.math_chunker import MathChunker
+from app.services.multimodal.math.math_embedder import MultimodalEmbedder
+from app.services.multimodal.math.math_uploader import PineconeUploader
 from app.core.config import settings
 
 # Configure logging
