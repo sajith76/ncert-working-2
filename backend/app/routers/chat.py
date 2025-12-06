@@ -1,5 +1,5 @@
 """
-Chat Router - RAG-based chat endpoints.
+Chat Router - RAG-based chat endpoints with multi-index support.
 """
 
 from fastapi import APIRouter, HTTPException
@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from typing import Literal
 from app.models.schemas import ChatRequest, ChatResponse, ErrorResponse
 from app.services.rag_service import rag_service
+from app.services.enhanced_rag_service import enhanced_rag_service
 from app.services.gemini_service import gemini_service
 import logging
 
@@ -158,48 +159,64 @@ class StudentChatRequest(BaseModel):
 @router.post("/student", response_model=ChatResponse)
 async def student_chatbot(request: StudentChatRequest):
     """
-    Open student chatbot endpoint with Quick/DeepDive modes.
+    🎓 Enhanced Student Chatbot with Multi-Index Progressive Learning
     
-    **Quick Mode**: Direct answers from current + previous class textbook content.
-    **DeepDive Mode**: Comprehensive answers from ALL prerequisite classes + web content.
+    **BASIC MODE (Quick)**:
+    - Searches current class + 2 recent lower classes
+    - Example: Class 10 student → searches Classes 8, 9, 10
+    - Fast, focused answers from textbook
+    - Perfect for homework help and quick concept clarification
     
-    Uses progressive learning architecture - automatically accesses foundational content
-    from earlier classes to help build understanding. For example, Class 11 students
-    can access Class 9-10 prerequisites automatically.
+    **DEEP DIVE MODE**:
+    - Searches ALL classes from fundamentals (Class 5 or earliest) to current
+    - Example: Class 10 asking about "line" → builds from Class 5 basics to Class 10
+    - Includes web content for comprehensive background
+    - Starts with "What is a line?", "Why do we need it?", builds progressively
+    - Perfect for thorough understanding and exam preparation
+    
+    **Progressive Learning Architecture**:
+    - Automatically accesses foundational content from earlier classes
+    - Builds understanding layer by layer
+    - Example: Class 11 Physics on "Force" → uses Class 9-10 Newton's laws as foundation
     """
     try:
-        logger.info(f"Student chat ({request.mode}): Class {request.class_level}, {request.subject}, Ch. {request.chapter}")
-        logger.info(f"Question: {request.question[:100]}...")
+        logger.info(f"🎓 Student chat ({request.mode.upper()}): Class {request.class_level}, {request.subject}")
+        logger.info(f"   Question: {request.question[:100]}...")
         
+        # Convert to new enhanced system
         if request.mode == "quick":
-            # Quick mode: Progressive learning (current + previous class)
-            answer, source_chunks = rag_service.query_with_rag_progressive(
-                query_text=request.question,
-                class_level=request.class_level,
+            # BASIC MODE: Current + recent lower classes (textbook only)
+            answer, source_chunks_list = enhanced_rag_service.answer_question_basic(
+                question=request.question,
                 subject=request.subject,
-                chapter=request.chapter,
-                mode="quick",  # Includes current + previous class
-                top_k=10,
-                min_score=0.60  # Reasonable threshold for progressive queries
+                student_class=request.class_level,
+                chapter=request.chapter
             )
             
-            # Check if answer is relevant based on source scores
+            # Convert chunk format for compatibility
+            source_chunks = [chunk.get('text', '') for chunk in source_chunks_list]
+            
+            # Check if answer is meaningful
             if not source_chunks or len(source_chunks) < 2:
                 return ChatResponse(
-                    answer=f"I couldn't find a direct answer to this in your textbook. However, your textbook covers related topics in Chapter {request.chapter} of {request.subject}. Try asking about specific concepts from the chapter!",
+                    answer=f"I couldn't find enough information in your textbooks. Try asking about specific topics covered in Chapter {request.chapter} of {request.subject}!",
                     used_mode="quick",
                     source_chunks=[]
                 )
-            
-        else:
-            # DeepDive mode: Progressive learning (ALL prerequisite classes) + web content
-            answer, source_chunks = rag_service.query_with_rag_deepdive(
-                query_text=request.question,
-                class_level=request.class_level,
+        
+        else:  # deepdive mode
+            # DEEP DIVE MODE: ALL prerequisite classes + web content
+            answer, source_chunks_list = enhanced_rag_service.answer_question_deepdive(
+                question=request.question,
                 subject=request.subject,
-                chapter=request.chapter,
-                top_k=20  # More chunks for comprehensive multi-class answers
+                student_class=request.class_level,
+                chapter=request.chapter
             )
+            
+            # Convert chunk format
+            source_chunks = [chunk.get('text', '') for chunk in source_chunks_list]
+        
+        logger.info(f"✅ Answer generated: {len(answer)} chars, {len(source_chunks)} sources")
         
         return ChatResponse(
             answer=answer,
@@ -209,4 +226,6 @@ async def student_chatbot(request: StudentChatRequest):
     
     except Exception as e:
         logger.error(f"❌ Student chat error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
