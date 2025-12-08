@@ -4,10 +4,13 @@ Enhanced Multi-Index RAG Service
 Implements intelligent cross-index retrieval:
 - Basic Mode: Current class + relevant lower classes (textbook only)
 - Deep Dive Mode: From fundamentals (earliest class) + web content for comprehensive understanding
+- Triple-Index: Textbook + Web Scraped + LLM Generated content
 """
 
 from app.services.gemini_service import gemini_service
-from app.db.mongo import pinecone_db, pinecone_web_db
+from app.db.mongo import pinecone_db, pinecone_web_db, pinecone_llm_db
+from app.services.llm_storage_service import llm_storage_service
+from app.services.web_scraper_service import web_scraper_service
 import logging
 import re
 from typing import List, Dict, Tuple, Optional
@@ -30,11 +33,17 @@ class EnhancedRAGService:
         self.gemini = gemini_service
         self.textbook_db = pinecone_db  # ncert-all-subjects index
         self.web_db = pinecone_web_db    # ncert-web-content index
+        self.llm_db = pinecone_llm_db    # ncert-llm index (NEW)
+        
+        # Storage and scraping services
+        self.llm_storage = llm_storage_service
+        self.web_scraper = web_scraper_service
         
         # CRITICAL FIX: Use same embedding model as data upload
         # Data was uploaded using sentence-transformers, so we must use it for queries too!
         self.embedding_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
         logger.info("✅ RAG Service: Using sentence-transformers/all-mpnet-base-v2 for embeddings")
+        logger.info("✅ Triple-Index System: Textbook + Web + LLM content")
         
         # Subject to namespace mapping for ncert-all-subjects index
         self.subject_namespaces = {
@@ -291,6 +300,67 @@ class EnhancedRAGService:
             logger.warning(f"Web content query failed: {e}")
             return []
     
+    def query_llm_content(
+        self,
+        query_text: str,
+        subject: str,
+        top_k: int = 3
+    ) -> List[Dict]:
+        """
+        Query stored LLM-generated answers for similar questions.
+        
+        Args:
+            query_text: Student's question
+            subject: Subject name
+            top_k: Number of results
+        
+        Returns:
+            List of LLM-generated answer chunks
+        """
+        try:
+            if not self.llm_db or not self.llm_db.index:
+                logger.debug("LLM content DB not available")
+                return []
+            
+            # Generate embedding using sentence-transformers
+            query_embedding = self.embedding_model.encode(query_text).tolist()
+            
+            # Query LLM content index
+            results = self.llm_db.query(
+                vector=query_embedding,
+                subject=subject,
+                top_k=top_k
+            )
+            
+            llm_chunks = []
+            for match in results.get('matches', []):
+                # High threshold for LLM reuse - must be very similar
+                if match.get('score', 0) >= 0.75:
+                    metadata = match.get('metadata', {})
+                    
+                    # Increment usage count
+                    self.llm_db.increment_usage(match['id'], subject)
+                    
+                    chunk_data = {
+                        'text': metadata.get('answer', ''),
+                        'source': 'llm_generated',
+                        'score': match.get('score', 0),
+                        'topic': metadata.get('topic', 'general'),
+                        'quality_score': metadata.get('quality_score', 0.9),
+                        'usage_count': metadata.get('usage_count', 0) + 1
+                    }
+                    llm_chunks.append(chunk_data)
+            
+            if llm_chunks:
+                scores_list = [f"{c['score']:.2f}" for c in llm_chunks]
+                logger.info(f"💡 LLM content: {len(llm_chunks)} stored answers retrieved (scores: {scores_list})")
+            
+            return llm_chunks
+            
+        except Exception as e:
+            logger.warning(f"LLM content query failed: {e}")
+            return []
+    
     def generate_basic_answer(
         self,
         question: str,
@@ -460,6 +530,113 @@ Generate a thorough, well-structured deep dive explanation:"""
         
         return answer
     
+    def generate_answer_from_multiple_sources(
+        self,
+        question: str,
+        textbook_chunks: List[Dict],
+        llm_chunks: List[Dict],
+        web_chunks: List[Dict],
+        class_distribution: Dict[int, int],
+        student_class: int,
+        subject: str,
+        mode: str = "basic"
+    ) -> str:
+        """
+        Generate answer using triple-index system (Textbook + LLM + Web).
+        Prioritizes textbook content, enriches with LLM answers, supplements with web content.
+        
+        Args:
+            question: Student's question
+            textbook_chunks: Retrieved textbook chunks
+            llm_chunks: Retrieved LLM-generated answer chunks
+            web_chunks: Retrieved web content chunks
+            class_distribution: Number of textbook chunks per class
+            student_class: Student's current class
+            subject: Subject name
+            mode: "basic" or "deepdive"
+        
+        Returns:
+            Generated answer
+        """
+        if not textbook_chunks and not llm_chunks and not web_chunks:
+            return f"I couldn't find enough information to answer your question. Try asking about specific topics from your {subject} curriculum!"
+        
+        # Build multi-source context
+        context_sections = []
+        
+        # PRIORITY 1: Textbook Content (Most Important)
+        if textbook_chunks:
+            classes_used = sorted(set(chunk.get('class') for chunk in textbook_chunks))
+            context_sections.append(f"**PRIMARY SOURCE - NCERT Textbook (Classes {', '.join(map(str, classes_used))}):**\n")
+            
+            textbook_context = []
+            for chunk in textbook_chunks[:10]:
+                class_level = chunk.get('class', student_class)
+                textbook_context.append(f"[Class {class_level}] {chunk['text']}")
+            
+            context_sections.append("\n\n".join(textbook_context))
+        
+        # PRIORITY 2: Previously Generated Explanations (High Quality)
+        if llm_chunks:
+            context_sections.append("\n\n**REFERENCE - Previously Generated Explanations:**\n")
+            
+            llm_context = []
+            for chunk in llm_chunks[:2]:
+                topic = chunk.get('topic', 'general')
+                score = chunk.get('score', 0)
+                llm_context.append(f"[Topic: {topic}, Relevance: {score:.2f}]\n{chunk['text']}")
+            
+            context_sections.append("\n\n".join(llm_context))
+        
+        # PRIORITY 3: Web Resources (Supplementary)
+        if web_chunks:
+            context_sections.append("\n\n**SUPPLEMENTARY - Web Resources:**\n")
+            
+            web_context = []
+            for chunk in web_chunks[:5]:
+                source_url = chunk.get('url', 'N/A')
+                web_context.append(f"[Source: {source_url[:50]}...]\n{chunk['text']}")
+            
+            context_sections.append("\n\n".join(web_context))
+        
+        combined_context = "\n\n".join(context_sections)
+        
+        # Build comprehensive prompt
+        mode_description = "COMPREHENSIVE" if mode == "deepdive" else "FOCUSED"
+        
+        prompt = f"""You are an expert NCERT tutor for Class {student_class} {subject} providing a {mode_description} explanation.
+
+**STUDENT QUESTION:** {question}
+
+**AVAILABLE SOURCES (in priority order):**
+{combined_context}
+
+**ANSWER GENERATION INSTRUCTIONS:**
+
+1. **Primary Source**: Base your answer on NCERT textbook content (if available)
+2. **Enhancement**: Use previously generated explanations for clarity and additional insights
+3. **Enrichment**: Add web resources for examples, applications, or additional context
+4. **NO HALLUCINATION**: Only use information provided in the sources above
+5. **Clear Structure**: 
+   {'- Start from fundamentals' if mode == 'deepdive' else '- Direct and concise'}
+   - Use headings, bullet points, and examples
+   - Appropriate for Class {student_class} students
+6. **Source Integration**: Smoothly blend information from all sources
+7. **Educational Focus**: Emphasize understanding, not just facts
+
+Generate a {'comprehensive' if mode == 'deepdive' else 'clear and focused'} answer:"""
+        
+        answer = self.gemini.generate_response(prompt)
+        
+        # Log sources used
+        sources_summary = f"Textbook: {len(textbook_chunks)}, LLM: {len(llm_chunks)}, Web: {len(web_chunks)}"
+        logger.info(f"✅ Answer generated ({len(answer)} chars) from {sources_summary}")
+        
+        # Clean markdown formatting
+        answer = self._clean_markdown_formatting(answer)
+        
+        return answer
+    
     # Main public methods
     
     def answer_question_basic(
@@ -470,8 +647,8 @@ Generate a thorough, well-structured deep dive explanation:"""
         chapter: Optional[int] = None
     ) -> Tuple[str, List[Dict]]:
         """
-        Answer question in BASIC mode.
-        Uses current class + recent lower classes (textbook only).
+        Answer question in BASIC mode with triple-index system.
+        Queries: Textbook + Web + LLM content.
         
         Args:
             question: Student's question
@@ -482,11 +659,11 @@ Generate a thorough, well-structured deep dive explanation:"""
         Returns:
             Tuple of (answer, source_chunks)
         """
-        logger.info(f"📚 BASIC MODE: Class {student_class} {subject}")
+        logger.info(f"📚 BASIC MODE (Triple-Index): Class {student_class} {subject}")
         logger.info(f"   Question: {question[:100]}...")
         
-        # Query multi-class textbook content
-        chunks, class_dist = self.query_multi_class(
+        # 1. Query textbook content (primary source)
+        textbook_chunks, class_dist = self.query_multi_class(
             query_text=question,
             subject=subject,
             student_class=student_class,
@@ -495,16 +672,57 @@ Generate a thorough, well-structured deep dive explanation:"""
             chunks_per_class=5
         )
         
-        # Generate answer
-        answer = self.generate_basic_answer(
-            question=question,
-            textbook_chunks=chunks,
-            class_distribution=class_dist,
-            student_class=student_class,
-            subject=subject
+        # 2. Query stored LLM answers
+        llm_chunks = self.query_llm_content(
+            query_text=question,
+            subject=subject,
+            top_k=2
         )
         
-        return answer, chunks
+        # 3. Query web content
+        web_chunks = self.query_web_content(
+            query_text=question,
+            subject=subject,
+            student_class=student_class,
+            top_k=3
+        )
+        
+        # 4. Check if we need more content via web scraping
+        total_chunks = len(textbook_chunks) + len(web_chunks)
+        if self.web_scraper.should_scrape(total_chunks, threshold=5):
+            # Extract topic and trigger scraping
+            topic = self.llm_storage._extract_topic(question)
+            logger.info(f"🌐 Triggering web scraping for topic: {topic}")
+            self.web_scraper.scrape_topic(subject, topic, student_class, max_sources=2)
+        
+        # Combine all sources
+        all_chunks = textbook_chunks + llm_chunks + web_chunks
+        
+        # Generate answer from multiple sources
+        answer = self.generate_answer_from_multiple_sources(
+            question=question,
+            textbook_chunks=textbook_chunks,
+            llm_chunks=llm_chunks,
+            web_chunks=web_chunks,
+            class_distribution=class_dist,
+            student_class=student_class,
+            subject=subject,
+            mode="basic"
+        )
+        
+        # Store answer if high quality
+        if self.llm_storage._should_store_answer(answer):
+            topic = self.llm_storage._extract_topic(question)
+            self.llm_storage.store_answer(
+                question=question,
+                answer=answer,
+                subject=subject,
+                class_level=student_class,
+                topic=topic,
+                quality_score=0.9
+            )
+        
+        return answer, all_chunks
     
     def answer_question_deepdive(
         self,
@@ -514,8 +732,8 @@ Generate a thorough, well-structured deep dive explanation:"""
         chapter: Optional[int] = None
     ) -> Tuple[str, List[Dict]]:
         """
-        Answer question in DEEP DIVE mode.
-        Starts from fundamentals (earliest available class) + web content.
+        Answer question in DEEP DIVE mode with triple-index system.
+        Queries: Textbook (all classes) + Web + LLM content + auto-scraping.
         
         Args:
             question: Student's question
@@ -526,11 +744,11 @@ Generate a thorough, well-structured deep dive explanation:"""
         Returns:
             Tuple of (answer, combined_source_chunks)
         """
-        logger.info(f"🔍 DEEP DIVE MODE: Class {student_class} {subject}")
+        logger.info(f"🔍 DEEP DIVE MODE (Triple-Index): Class {student_class} {subject}")
         logger.info(f"   Question: {question[:100]}...")
         logger.info(f"   Will search from fundamentals (earliest class) to current class")
         
-        # Query textbook content (all prerequisite classes)
+        # 1. Query textbook content (all prerequisite classes)
         textbook_chunks, class_dist = self.query_multi_class(
             query_text=question,
             subject=subject,
@@ -540,7 +758,14 @@ Generate a thorough, well-structured deep dive explanation:"""
             chunks_per_class=8  # More chunks per class for comprehensive coverage
         )
         
-        # Query web content for additional context
+        # 2. Query stored LLM answers
+        llm_chunks = self.query_llm_content(
+            query_text=question,
+            subject=subject,
+            top_k=3
+        )
+        
+        # 3. Query web content for additional context
         web_chunks = self.query_web_content(
             query_text=question,
             subject=subject,
@@ -548,18 +773,48 @@ Generate a thorough, well-structured deep dive explanation:"""
             top_k=10
         )
         
-        # Generate comprehensive answer
-        answer = self.generate_deepdive_answer(
+        # 4. Check if we need more content via web scraping
+        total_chunks = len(textbook_chunks) + len(web_chunks)
+        if self.web_scraper.should_scrape(total_chunks, threshold=8):
+            # Extract topic and trigger scraping
+            topic = self.llm_storage._extract_topic(question)
+            logger.info(f"🌐 Triggering web scraping for topic: {topic}")
+            self.web_scraper.scrape_topic(subject, topic, student_class, max_sources=3)
+            
+            # Re-query web content after scraping
+            web_chunks = self.query_web_content(
+                query_text=question,
+                subject=subject,
+                student_class=student_class,
+                top_k=10
+            )
+        
+        # Combine all sources
+        all_chunks = textbook_chunks + llm_chunks + web_chunks
+        
+        # Generate comprehensive answer from multiple sources
+        answer = self.generate_answer_from_multiple_sources(
             question=question,
             textbook_chunks=textbook_chunks,
+            llm_chunks=llm_chunks,
             web_chunks=web_chunks,
             class_distribution=class_dist,
             student_class=student_class,
-            subject=subject
+            subject=subject,
+            mode="deepdive"
         )
         
-        # Combine all chunks for source display
-        all_chunks = textbook_chunks + web_chunks
+        # Store answer if high quality
+        if self.llm_storage._should_store_answer(answer):
+            topic = self.llm_storage._extract_topic(question)
+            self.llm_storage.store_answer(
+                question=question,
+                answer=answer,
+                subject=subject,
+                class_level=student_class,
+                topic=topic,
+                quality_score=0.95  # Higher score for deepdive answers
+            )
         
         return answer, all_chunks
 

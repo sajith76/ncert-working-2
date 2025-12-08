@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     PINECONE_WEB_INDEX: str
     PINECONE_WEB_HOST: str
     
+    # LLM Generated Content Storage (NEW)
+    PINECONE_LLM_INDEX: str = "ncert-llm"
+    PINECONE_LLM_HOST: Optional[str] = None
+    
     # Legacy index (deprecated - kept for backward compatibility)
     PINECONE_INDEX: str
     PINECONE_HOST: str

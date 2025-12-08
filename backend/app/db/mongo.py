@@ -245,6 +245,160 @@ class PineconeWebDB:
 pinecone_web_db = PineconeWebDB()
 
 
+# ==================== PINECONE LLM CONTENT DATABASE ====================
+
+class PineconeLLMDB:
+    """Pinecone Vector Database for storing LLM-generated answers."""
+    
+    def __init__(self):
+        self.pc = None
+        self.index = None
+    
+    def connect(self):
+        """Initialize Pinecone LLM content connection."""
+        try:
+            # Initialize Pinecone (reuse same API key)
+            self.pc = Pinecone(api_key=settings.PINECONE_API_KEY)
+            
+            # Check if LLM index exists, if not we'll note it in logs
+            if settings.PINECONE_LLM_HOST:
+                # Connect to LLM content index
+                self.index = self.pc.Index(
+                    name=settings.PINECONE_LLM_INDEX,
+                    host=settings.PINECONE_LLM_HOST
+                )
+                
+                # Test connection
+                stats = self.index.describe_index_stats()
+                logger.info(f"✅ Connected to Pinecone LLM Content DB successfully")
+                logger.info(f"Index: {settings.PINECONE_LLM_INDEX}")
+                logger.info(f"Total LLM vectors: {stats.get('total_vector_count', 0)}")
+            else:
+                logger.warning("⚠️ PINECONE_LLM_HOST not configured - LLM storage disabled")
+                logger.warning("To enable: Create 'ncert-llm' index (768 dim) and add PINECONE_LLM_HOST to .env")
+            
+        except Exception as e:
+            logger.error(f"Failed to connect to Pinecone LLM DB: {e}")
+            logger.warning("LLM content DB connection failed - LLM storage will be disabled")
+            # Don't raise - allow server to start without LLM DB
+    
+    def store_llm_response(
+        self,
+        vector_id: str,
+        question: str,
+        answer: str,
+        subject: str,
+        topic: str,
+        class_level: int,
+        embedding: list[float],
+        quality_score: float = 0.9
+    ):
+        """
+        Store LLM-generated answer with metadata.
+        
+        Args:
+            vector_id: Unique identifier for the vector
+            question: Student's question
+            answer: LLM-generated answer
+            subject: Subject name (Mathematics, Physics, etc.)
+            topic: Specific topic (algebra, trigonometry, etc.)
+            class_level: Student's class (6, 7, 8, etc.)
+            embedding: Question embedding vector (768 dimensions)
+            quality_score: Answer quality score (0-1)
+        """
+        try:
+            if not self.index:
+                logger.warning("LLM DB not connected - skipping storage")
+                return False
+            
+            from datetime import datetime
+            
+            metadata = {
+                "question": question[:1000],  # Limit length
+                "answer": answer[:2000],  # Limit length
+                "subject": subject,
+                "topic": topic.lower(),
+                "class": str(class_level),
+                "quality_score": quality_score,
+                "created_date": datetime.now().isoformat(),
+                "usage_count": 0
+            }
+            
+            # Upsert to Pinecone (namespace = subject)
+            self.index.upsert(
+                vectors=[(vector_id, embedding, metadata)],
+                namespace=subject.lower()
+            )
+            
+            logger.info(f"✅ Stored LLM answer: {vector_id} in {subject} namespace")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to store LLM response: {e}")
+            return False
+    
+    def query(self, vector: list[float], subject: str, top_k: int = 3, filter: dict = None):
+        """
+        Query Pinecone LLM content index with a vector.
+        
+        Args:
+            vector: Query embedding vector
+            subject: Subject namespace to query
+            top_k: Number of results to return
+            filter: Additional metadata filter
+        
+        Returns:
+            Query results from Pinecone
+        """
+        try:
+            if not self.index:
+                logger.debug("LLM DB not connected - returning empty results")
+                return {"matches": []}
+            
+            results = self.index.query(
+                namespace=subject.lower(),
+                vector=vector,
+                top_k=top_k,
+                filter=filter,
+                include_metadata=True
+            )
+            return results
+            
+        except Exception as e:
+            logger.error(f"Pinecone LLM query failed: {e}")
+            return {"matches": []}
+    
+    def increment_usage(self, vector_id: str, subject: str):
+        """Increment usage counter for a stored answer."""
+        try:
+            if not self.index:
+                return
+            
+            # Fetch current metadata
+            fetch_result = self.index.fetch(ids=[vector_id], namespace=subject.lower())
+            if vector_id in fetch_result.get('vectors', {}):
+                vector_data = fetch_result['vectors'][vector_id]
+                metadata = vector_data.get('metadata', {})
+                
+                # Increment usage count
+                metadata['usage_count'] = metadata.get('usage_count', 0) + 1
+                
+                # Update vector
+                self.index.upsert(
+                    vectors=[(vector_id, vector_data['values'], metadata)],
+                    namespace=subject.lower()
+                )
+                
+                logger.debug(f"Incremented usage count for {vector_id}")
+                
+        except Exception as e:
+            logger.error(f"Failed to increment usage count: {e}")
+
+
+# Global Pinecone LLM Content instance
+pinecone_llm_db = PineconeLLMDB()
+
+
 # ==================== SUBJECT-WISE PINECONE DATABASES (NEW ARCHITECTURE) ====================
 
 class SubjectWisePineconeDB:
@@ -774,6 +928,9 @@ async def init_databases():
     
     # Connect to Pinecone Web Content DB
     pinecone_web_db.connect()
+    
+    # Connect to Pinecone LLM Content DB (NEW)
+    pinecone_llm_db.connect()
     
     # Connect to NEW Namespace-Based DB (PRODUCTION)
     logger.info("\n🚀 Connecting to Production Namespace Architecture:")
