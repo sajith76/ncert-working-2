@@ -24,7 +24,7 @@ const useUserStore = create(
         name: "",
         email: "",
         classLevel: 6, // Default to Class 6
-        preferredSubject: "Social Science",
+        preferredSubject: "Mathematics",
       },
 
       // Authentication state
@@ -50,7 +50,7 @@ const useUserStore = create(
             name: "",
             email: "",
             classLevel: 6,
-            preferredSubject: "Social Science",
+            preferredSubject: "Mathematics",
           },
           isAuthenticated: false,
         }),

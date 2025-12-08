@@ -15,12 +15,38 @@ Architecture:
     Text+Images  Formulas   768-dim vectors
 """
 
-from .pdf_processor import PDFProcessor
-from .formula_extractor import FormulaExtractor
-from .image_processor import ImageProcessor
-from .chunker import MathChunker
-from .embedder import MultimodalEmbedder
-from .uploader import PineconeUploader
+# Note: Import from math/ subdirectory directly if needed
+# These base classes are placeholders, actual implementations in math/ and physics/
+
+try:
+    from .pdf_processor import PDFProcessor
+except ImportError:
+    PDFProcessor = None
+
+try:
+    from .formula_extractor import FormulaExtractor
+except ImportError:
+    FormulaExtractor = None
+
+try:
+    from .image_processor import ImageProcessor
+except ImportError:
+    ImageProcessor = None
+
+try:
+    from .chunker import MathChunker
+except ImportError:
+    MathChunker = None
+
+try:
+    from .embedder import MultimodalEmbedder
+except ImportError:
+    MultimodalEmbedder = None
+
+try:
+    from .uploader import PineconeUploader
+except ImportError:
+    PineconeUploader = None
 
 __all__ = [
     'PDFProcessor',

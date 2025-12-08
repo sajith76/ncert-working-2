@@ -9,7 +9,9 @@ Implements intelligent cross-index retrieval:
 from app.services.gemini_service import gemini_service
 from app.db.mongo import pinecone_db, pinecone_web_db
 import logging
+import re
 from typing import List, Dict, Tuple, Optional
+from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,11 @@ class EnhancedRAGService:
         self.gemini = gemini_service
         self.textbook_db = pinecone_db  # ncert-all-subjects index
         self.web_db = pinecone_web_db    # ncert-web-content index
+        
+        # CRITICAL FIX: Use same embedding model as data upload
+        # Data was uploaded using sentence-transformers, so we must use it for queries too!
+        self.embedding_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
+        logger.info("✅ RAG Service: Using sentence-transformers/all-mpnet-base-v2 for embeddings")
         
         # Subject to namespace mapping for ncert-all-subjects index
         self.subject_namespaces = {
@@ -58,6 +65,34 @@ class EnhancedRAGService:
             "English": list(range(5, 13)),       # Class 5-12
             "Hindi": list(range(5, 13))          # Class 5-12
         }
+    
+    def _clean_markdown_formatting(self, text: str) -> str:
+        """
+        Clean markdown formatting to make text more readable for display.
+        Converts markdown to plain text with proper formatting.
+        """
+        if not text:
+            return text
+        
+        # Convert **bold** to plain text
+        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+        
+        # Convert *italic* to plain text
+        text = re.sub(r'\*(.*?)\*', r'\1', text)
+        
+        # Convert bullet points with * to proper bullets
+        text = re.sub(r'^\s*\*\s+', '• ', text, flags=re.MULTILINE)
+        
+        # Convert numbered lists (1. 2. 3.) to better formatting  
+        text = re.sub(r'^\s*(\d+)\.\s+', r'\1. ', text, flags=re.MULTILINE)
+        
+        # Clean up excessive newlines (more than 2)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        
+        # Remove any remaining markdown escape characters
+        text = text.replace('\\*', '*')
+        
+        return text.strip()
     
     def get_namespace(self, subject: str) -> str:
         """Get Pinecone namespace for subject"""
@@ -119,8 +154,8 @@ class EnhancedRAGService:
             Tuple of (chunks, class_distribution)
         """
         try:
-            # Get embedding
-            query_embedding = self.gemini.generate_embedding(query_text)
+            # Get embedding using sentence-transformers (CRITICAL: Must match data upload model!)
+            query_embedding = self.embedding_model.encode(query_text).tolist()
             
             # Get classes to search
             classes_to_search = self.get_prerequisite_classes(subject, student_class, mode)
@@ -135,13 +170,14 @@ class EnhancedRAGService:
             
             for class_level in classes_to_search:
                 # Build metadata filter
+                # CRITICAL: Pinecone stores class as STRING, not integer!
                 metadata_filter = {
-                    "class": class_level,  # Use integer for new system
+                    "class": {"$eq": str(class_level)},  # Convert to string for filter
                     "subject": subject
                 }
                 
                 if chapter is not None:
-                    metadata_filter["chapter"] = chapter
+                    metadata_filter["chapter"] = str(chapter)  # Also convert chapter to string
                 
                 try:
                     # Query textbook index with namespace
@@ -220,8 +256,8 @@ class EnhancedRAGService:
                 logger.info("ℹ️ Web content DB not available")
                 return []
             
-            # Generate embedding
-            query_embedding = self.gemini.generate_embedding(query_text)
+            # Generate embedding using sentence-transformers (CRITICAL: Must match data upload model!)
+            query_embedding = self.embedding_model.encode(query_text).tolist()
             
             # Query web content index
             # Note: Web content may use broader metadata structure
@@ -329,6 +365,9 @@ Generate a clear, helpful answer:"""
         answer = self.gemini.generate_response(prompt)
         logger.info(f"✓ Basic answer generated ({len(answer)} chars)")
         
+        # Clean markdown formatting for better display
+        answer = self._clean_markdown_formatting(answer)
+        
         return answer
     
     def generate_deepdive_answer(
@@ -415,6 +454,9 @@ Generate a thorough, well-structured deep dive explanation:"""
         
         answer = self.gemini.generate_response(prompt)
         logger.info(f"✓ Deep dive answer generated ({len(answer)} chars)")
+        
+        # Clean markdown formatting for better display
+        answer = self._clean_markdown_formatting(answer)
         
         return answer
     
