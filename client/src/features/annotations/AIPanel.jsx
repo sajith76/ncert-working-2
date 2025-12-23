@@ -58,33 +58,20 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
       console.log("🚀 Calling backend API...", {
         chapter: currentLesson?.number || 1,
         text: selectedText?.text,
-        mode: action.id
+        action: action.id
       });
 
-      // Special handling for Stick Flow (image generation)
-      if (action.id === "stick_flow") {
-        const result = await chatService.getStickFlow(
-          selectedText?.text || "",
-          user.classLevel,
-          user.preferredSubject || "Social Science",
-          currentLesson?.number || 1
-        );
-        console.log("✅ Stick Flow response:", result);
-        setImageUrl(result.imageUrl);
-        setResponse(result.description || "Visual flow diagram created");
-      } else {
-        // Regular chat for Define and Elaborate
-        const result = await chatService.getExplanation(
-          selectedText?.text || "",
-          action.id,
-          user.classLevel,
-          user.preferredSubject || "Social Science",
-          currentLesson?.number || 1
-        );
-        console.log("✅ Backend response received:", result);
-        setResponse(result.answer);
-      }
-
+      // Use unified annotation endpoint for all actions
+      const result = await chatService.processAnnotation(
+        selectedText?.text || "",
+        action.id, // "define", "elaborate", or "stick_flow"
+        user.classLevel,
+        user.preferredSubject || "Social Science",
+        currentLesson?.number || 1
+      );
+      
+      console.log("✅ Backend response received:", result);
+      setResponse(result.answer);
       setIsProcessing(false);
     } catch (err) {
       console.error("❌ AI API Error:", err);

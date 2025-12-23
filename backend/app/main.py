@@ -13,7 +13,7 @@ import logging
 
 from app.core.config import settings
 from app.db.mongo import init_databases, close_databases
-from app.routers import chat, mcq, evaluate, notes, assessment
+from app.routers import chat, mcq, evaluate, notes, assessment, annotation
 
 # Configure logging
 logging.basicConfig(
@@ -100,6 +100,7 @@ app.include_router(mcq.router, prefix="/api")
 app.include_router(evaluate.router, prefix="/api")
 app.include_router(notes.router, prefix="/api")
 app.include_router(assessment.router, prefix="/api")  # ✅ Voice Assessment
+app.include_router(annotation.router, prefix="/api")  # ✅ Annotation Chatbot
 
 
 # Root endpoint

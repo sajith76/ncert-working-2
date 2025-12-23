@@ -13,24 +13,25 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
  */
 export const chatService = {
   /**
-   * Get AI explanation for selected text
-   * @param {string} text - The selected text to explain
-   * @param {string} mode - Explanation mode (define/elaborate)
+   * Process annotation with AI (Define, Elaborate, Stick Flow)
+   * UNIFIED ENDPOINT - Replaces getExplanation and getStickFlow
+   * @param {string} text - The selected text to process
+   * @param {string} action - Action type: "define", "elaborate", or "stick_flow"
    * @param {number} classLevel - User's class level (5-10)
    * @param {string} subject - Subject name
    * @param {number} chapter - Chapter number
-   * @returns {Promise<{answer: string, sources: array}>}
+   * @returns {Promise<{answer: string, action_type: string, source_count: number}>}
    */
-  async getExplanation(text, mode, classLevel, subject, chapter) {
+  async processAnnotation(text, action, classLevel, subject, chapter) {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat`, {
+      const response = await fetch(`${API_BASE_URL}/api/annotation/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          highlight_text: text,
-          mode: mode,
+          selected_text: text,
+          action: action, // "define", "elaborate", or "stick_flow"
           class_level: classLevel,
           subject: subject,
           chapter: chapter,
@@ -39,53 +40,37 @@ export const chatService = {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`API Error: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        throw new Error(errorData.detail || `API Error: ${response.statusText}`);
       }
 
       const data = await response.json();
       return {
         answer: data.answer,
-        sources: data.source_chunks || [],
+        actionType: data.action_type,
+        sourceCount: data.source_count,
       };
     } catch (error) {
-      console.error("Chat API Error:", error);
+      console.error("Annotation API Error:", error);
       throw error;
     }
   },
 
   /**
+   * @deprecated Use processAnnotation() instead
+   * Get AI explanation for selected text
+   */
+  async getExplanation(text, mode, classLevel, subject, chapter) {
+    // Redirect to new unified endpoint
+    return this.processAnnotation(text, mode, classLevel, subject, chapter);
+  },
+
+  /**
+   * @deprecated Use processAnnotation() with action="stick_flow" instead
    * Get Stick Flow visual diagram
-   * @param {string} text - The selected text to create flow for
-   * @param {number} classLevel - User's class level (5-10)
-   * @param {string} subject - Subject name
-   * @param {number} chapter - Chapter number
-   * @returns {Promise<{imageUrl: string, description: string}>}
    */
   async getStickFlow(text, classLevel, subject, chapter) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/chat/stick-flow`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          highlight_text: text,
-          class_level: classLevel,
-          subject: subject,
-          chapter: chapter,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Stick Flow API Error: ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Stick Flow API Error:", error);
-      throw error;
-    }
+    // Redirect to new unified endpoint
+    return this.processAnnotation(text, "stick_flow", classLevel, subject, chapter);
   },
 
   /**
