@@ -54,8 +54,8 @@ async def process_annotation(request: AnnotationRequest):
         
         # Get relevant context from textbook using RAG
         if request.action == "define":
-            # Quick mode: Current + 2 previous classes
-            answer, source_chunks = enhanced_rag_service.answer_question_basic(
+            # Quick mode: Current + 2 previous classes WITH lower LLM reuse threshold
+            answer, source_chunks = enhanced_rag_service.answer_annotation_basic(
                 question=f"Define: {request.selected_text}",
                 subject=request.subject,
                 student_class=request.class_level,
@@ -133,8 +133,8 @@ async def process_annotation(request: AnnotationRequest):
                 answer = f"No detailed information found in the book. '{request.selected_text}' might require additional resources beyond your Class {request.class_level} {request.subject} textbook."
         
         elif request.action == "stick_flow":
-            # Generate text-based flow diagram
-            answer, source_chunks = enhanced_rag_service.answer_question_basic(
+            # Generate text-based flow diagram WITH lower LLM reuse threshold
+            answer, source_chunks = enhanced_rag_service.answer_annotation_basic(
                 question=f"Explain the flow/process of: {request.selected_text}",
                 subject=request.subject,
                 student_class=request.class_level,

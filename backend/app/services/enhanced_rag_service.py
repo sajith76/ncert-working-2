@@ -304,7 +304,8 @@ class EnhancedRAGService:
         self,
         query_text: str,
         subject: str,
-        top_k: int = 3
+        top_k: int = 3,
+        similarity_threshold: float = 0.75
     ) -> List[Dict]:
         """
         Query stored LLM-generated answers for similar questions.
@@ -313,6 +314,7 @@ class EnhancedRAGService:
             query_text: Student's question
             subject: Subject name
             top_k: Number of results
+            similarity_threshold: Minimum similarity score (0.0-1.0) to reuse answer
         
         Returns:
             List of LLM-generated answer chunks
@@ -332,10 +334,16 @@ class EnhancedRAGService:
                 top_k=top_k
             )
             
+            # Log what we found (for debugging)
+            all_matches = results.get('matches', [])
+            if all_matches:
+                top_scores = [f"{m.get('score', 0):.3f}" for m in all_matches[:3]]
+                logger.info(f"💡 LLM index check: Found {len(all_matches)} similar answers (top scores: {top_scores})")
+            
             llm_chunks = []
             for match in results.get('matches', []):
-                # High threshold for LLM reuse - must be very similar
-                if match.get('score', 0) >= 0.75:
+                # Use configurable threshold for LLM reuse
+                if match.get('score', 0) >= similarity_threshold:
                     metadata = match.get('metadata', {})
                     
                     # Increment usage count
@@ -354,6 +362,9 @@ class EnhancedRAGService:
             if llm_chunks:
                 scores_list = [f"{c['score']:.2f}" for c in llm_chunks]
                 logger.info(f"💡 LLM content: {len(llm_chunks)} stored answers retrieved (scores: {scores_list})")
+            elif all_matches:
+                # Found similar answers but below threshold
+                logger.info(f"💡 LLM content: 0 answers met threshold ({similarity_threshold:.2f}+), will generate new answer")
             
             return llm_chunks
             
@@ -694,6 +705,86 @@ Generate a {'comprehensive' if mode == 'deepdive' else 'clear and focused'} answ
             topic = self.llm_storage._extract_topic(question)
             logger.info(f"🌐 Triggering web scraping for topic: {topic}")
             self.web_scraper.scrape_topic(subject, topic, student_class, max_sources=2)
+        
+        # Combine all sources
+        all_chunks = textbook_chunks + llm_chunks + web_chunks
+        
+        # Generate answer from multiple sources
+        answer = self.generate_answer_from_multiple_sources(
+            question=question,
+            textbook_chunks=textbook_chunks,
+            llm_chunks=llm_chunks,
+            web_chunks=web_chunks,
+            class_distribution=class_dist,
+            student_class=student_class,
+            subject=subject,
+            mode="basic"
+        )
+        
+        # Store answer if high quality
+        if self.llm_storage._should_store_answer(answer):
+            topic = self.llm_storage._extract_topic(question)
+            self.llm_storage.store_answer(
+                question=question,
+                answer=answer,
+                subject=subject,
+                class_level=student_class,
+                topic=topic,
+                quality_score=0.9
+            )
+        
+        return answer, all_chunks
+    
+    def answer_annotation_basic(
+        self,
+        question: str,
+        subject: str,
+        student_class: int,
+        chapter: Optional[int] = None
+    ) -> Tuple[str, List[Dict]]:
+        """
+        Answer annotation request with LOWER similarity threshold for LLM reuse.
+        
+        Annotations are often similar concepts worded differently, so we use
+        a lower threshold (0.65 vs 0.75) to reuse existing answers more aggressively.
+        
+        Args:
+            question: Annotation question
+            subject: Subject name
+            student_class: Current class level
+            chapter: Optional chapter filter
+        
+        Returns:
+            Tuple of (answer, source_chunks)
+        """
+        logger.info(f"📝 ANNOTATION MODE (Lower threshold): Class {student_class} {subject}")
+        logger.info(f"   Question: {question[:100]}...")
+        
+        # 1. Query textbook content (primary source)
+        textbook_chunks, class_dist = self.query_multi_class(
+            query_text=question,
+            subject=subject,
+            student_class=student_class,
+            chapter=chapter,
+            mode="basic",
+            chunks_per_class=5
+        )
+        
+        # 2. Query stored LLM answers with LOWER threshold for annotations
+        llm_chunks = self.query_llm_content(
+            query_text=question,
+            subject=subject,
+            top_k=3,
+            similarity_threshold=0.65  # Lower threshold for annotation reuse
+        )
+        
+        # 3. Query web content (optional)
+        web_chunks = self.query_web_content(
+            query_text=question,
+            subject=subject,
+            student_class=student_class,
+            top_k=2
+        )
         
         # Combine all sources
         all_chunks = textbook_chunks + llm_chunks + web_chunks
