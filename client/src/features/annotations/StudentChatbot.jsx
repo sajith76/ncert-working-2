@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { MessageCircle, Send, X, Sparkles, Minimize2, Zap, Brain } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { ScrollArea } from "../../components/ui/scroll-area";
@@ -212,19 +213,17 @@ export default function StudentChatbot({ currentLesson }) {
                   >
                     <div className="text-sm leading-relaxed">
                       {message.role === "assistant" ? (
-                        <div className="whitespace-pre-wrap">
-                          {message.content.split('\n').map((line, idx) => {
-                            // Bold text
-                            if (line.startsWith('**') && line.endsWith('**')) {
-                              return <div key={idx} className="font-semibold my-1">{line.replace(/\*\*/g, '')}</div>;
-                            }
-                            // Bullet points
-                            if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
-                              return <div key={idx} className="ml-4 my-1">• {line.replace(/^[-•]\s*/, '')}</div>;
-                            }
-                            // Regular text
-                            return <div key={idx} className="my-1">{line || <br />}</div>;
-                          })}
+                        <div className="prose prose-sm max-w-none 
+                          [&_strong]:font-bold [&_strong]:text-gray-900
+                          [&_em]:italic
+                          [&_p]:my-2
+                          [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:my-2
+                          [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-2
+                          [&_li]:my-1
+                          [&_h3]:font-bold [&_h3]:text-base [&_h3]:my-2
+                          [&_h2]:font-bold [&_h2]:text-lg [&_h2]:my-2
+                        ">
+                          <ReactMarkdown>{message.content}</ReactMarkdown>
                         </div>
                       ) : (
                         message.content

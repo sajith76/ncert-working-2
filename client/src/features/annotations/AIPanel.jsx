@@ -215,14 +215,18 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
                 ) : (
                   <ScrollArea className="h-full">
                     <div className="pr-4">
-                      <div
-                        className="max-w-none text-base leading-relaxed 
-     text-black
-     [&_strong]:font-bold 
-     [&_em]:italic 
-     [&_li]:list-disc [&_li]:ml-4"
-                      >
-                        <ReactMarkdown color="black">{response}</ReactMarkdown>
+                      <div className="prose prose-sm max-w-none
+                        [&_strong]:font-bold [&_strong]:text-gray-900 dark:[&_strong]:text-white
+                        [&_em]:italic
+                        [&_p]:my-2 [&_p]:text-gray-900 dark:[&_p]:text-gray-100
+                        [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:my-2
+                        [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-2
+                        [&_li]:my-1 [&_li]:text-gray-900 dark:[&_li]:text-gray-100
+                        [&_h3]:font-bold [&_h3]:text-base [&_h3]:my-2 [&_h3]:text-gray-900 dark:[&_h3]:text-white
+                        [&_h2]:font-bold [&_h2]:text-lg [&_h2]:my-2 [&_h2]:text-gray-900 dark:[&_h2]:text-white
+                        [&_h1]:font-bold [&_h1]:text-xl [&_h1]:my-2 [&_h1]:text-gray-900 dark:[&_h1]:text-white
+                      ">
+                        <ReactMarkdown>{response}</ReactMarkdown>
                       </div>
                     </div>
                   </ScrollArea>

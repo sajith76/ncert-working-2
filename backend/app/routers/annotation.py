@@ -47,10 +47,23 @@ async def process_annotation(request: AnnotationRequest):
     - Uses RAG for context (reduces Gemini tokens)
     - Targeted prompts for specific actions
     - No image generation (text-based flows)
+    
+    **Edge Case Handling:**
+    - Class 11-12: Limited content available (graceful fallback)
+    - Missing content: Searches earlier classes for foundation
+    - No matches: Uses Gemini general knowledge with disclaimer
     """
     try:
         logger.info(f"📝 Annotation request: {request.action.upper()} for '{request.selected_text[:50]}...'")
         logger.info(f"   Class {request.class_level}, {request.subject}")
+        
+        # EDGE CASE: Check class availability
+        # Currently we have comprehensive data for Classes 5-10
+        # Classes 11-12 have limited content
+        if request.class_level > 10:
+            logger.warning(f"⚠️ Class {request.class_level} requested (limited content available)")
+            # Don't block the request - let the RAG system try to find content
+            # If not found, it will fall back to general knowledge
         
         # Get relevant context from textbook using RAG
         if request.action == "define":
@@ -87,8 +100,7 @@ async def process_annotation(request: AnnotationRequest):
 • [Point 3]"""
                 
                 answer = gemini_service.generate_response(prompt)
-            else:
-                answer = f"No definition found in the book. '{request.selected_text}' might not be covered in your Class {request.class_level} {request.subject} textbook."
+            # Note: If no sources, answer_annotation_basic already provided fallback answer
         
         elif request.action == "elaborate":
             # Deep dive mode: Comprehensive explanation

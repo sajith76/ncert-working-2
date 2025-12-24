@@ -446,8 +446,8 @@ Generate a clear, helpful answer:"""
         answer = self.gemini.generate_response(prompt)
         logger.info(f"✓ Basic answer generated ({len(answer)} chars)")
         
-        # Clean markdown formatting for better display
-        answer = self._clean_markdown_formatting(answer)
+        # Keep markdown formatting for ReactMarkdown frontend rendering
+        # answer = self._clean_markdown_formatting(answer)  # DISABLED - frontend uses ReactMarkdown
         
         return answer
     
@@ -536,8 +536,8 @@ Generate a thorough, well-structured deep dive explanation:"""
         answer = self.gemini.generate_response(prompt)
         logger.info(f"✓ Deep dive answer generated ({len(answer)} chars)")
         
-        # Clean markdown formatting for better display
-        answer = self._clean_markdown_formatting(answer)
+        # Keep markdown formatting for ReactMarkdown frontend rendering
+        # answer = self._clean_markdown_formatting(answer)  # DISABLED - frontend uses ReactMarkdown
         
         return answer
     
@@ -643,8 +643,8 @@ Generate a {'comprehensive' if mode == 'deepdive' else 'clear and focused'} answ
         sources_summary = f"Textbook: {len(textbook_chunks)}, LLM: {len(llm_chunks)}, Web: {len(web_chunks)}"
         logger.info(f"✅ Answer generated ({len(answer)} chars) from {sources_summary}")
         
-        # Clean markdown formatting
-        answer = self._clean_markdown_formatting(answer)
+        # Keep markdown formatting for ReactMarkdown frontend rendering
+        # answer = self._clean_markdown_formatting(answer)  # DISABLED - frontend uses ReactMarkdown
         
         return answer
     
@@ -748,6 +748,10 @@ Generate a {'comprehensive' if mode == 'deepdive' else 'clear and focused'} answ
         Annotations are often similar concepts worded differently, so we use
         a lower threshold (0.65 vs 0.75) to reuse existing answers more aggressively.
         
+        EDGE CASE HANDLING:
+        - If no content found in current class, searches previous classes (foundation)
+        - If still no content, falls back to Gemini's general knowledge with disclaimer
+        
         Args:
             question: Annotation question
             subject: Subject name
@@ -786,8 +790,54 @@ Generate a {'comprehensive' if mode == 'deepdive' else 'clear and focused'} answ
             top_k=2
         )
         
+        # EDGE CASE 1: No content found - Try progressive search (earlier classes)
+        if not textbook_chunks and not llm_chunks:
+            logger.warning(f"⚠️ EDGE CASE: No content found for '{question[:50]}...' in Class {student_class}")
+            logger.info(f"🔄 Attempting progressive search in Classes {max(5, student_class-3)}-{student_class-1}...")
+            
+            # Try searching previous 3 classes for foundational content
+            for prev_class in range(student_class - 1, max(4, student_class - 4), -1):
+                logger.info(f"   Searching Class {prev_class}...")
+                prev_chunks, prev_dist = self.query_multi_class(
+                    query_text=question,
+                    subject=subject,
+                    student_class=prev_class,
+                    chapter=None,  # Remove chapter filter for broader search
+                    mode="basic",
+                    chunks_per_class=5
+                )
+                
+                if prev_chunks:
+                    logger.info(f"✅ Found {len(prev_chunks)} chunks in Class {prev_class} (foundation content)")
+                    textbook_chunks = prev_chunks
+                    class_dist = prev_dist
+                    break
+        
         # Combine all sources
         all_chunks = textbook_chunks + llm_chunks + web_chunks
+        
+        # EDGE CASE 2: Still no content - Use Gemini fallback with disclaimer
+        if not all_chunks:
+            logger.warning(f"⚠️ EDGE CASE: No content in any class for '{question[:50]}...'")
+            logger.info(f"🤖 Using Gemini fallback (general knowledge with disclaimer)")
+            
+            fallback_prompt = f"""The student asked: "{question}"
+
+This topic doesn't appear to be explicitly covered in their Class {student_class} {subject} textbook.
+
+Provide a simple, age-appropriate explanation suitable for Class {student_class} students:
+1. Basic definition or concept (2-3 sentences)
+2. One simple example
+3. End with: "Note: This explanation is based on general {subject} knowledge. Check your textbook or ask your teacher for content specific to your Class {student_class} syllabus."
+
+Keep it under 200 words and student-friendly."""
+            
+            answer = self.gemini.generate_response(fallback_prompt)
+            # Keep markdown formatting for ReactMarkdown frontend rendering
+            # answer = self._clean_markdown_formatting(answer)  # DISABLED - frontend uses ReactMarkdown
+            
+            logger.info(f"✓ Fallback answer generated ({len(answer)} chars)")
+            return answer, []  # Return empty chunks to indicate fallback was used
         
         # Generate answer from multiple sources
         answer = self.generate_answer_from_multiple_sources(

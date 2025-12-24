@@ -1,26 +1,60 @@
 """
-Gemini Service - Handles all Google Gemini AI interactions.
+Gemini Service - Handles all Google Gemini AI interactions with multi-key rotation.
 """
 
 import google.generativeai as genai
 from app.core.config import settings
+from app.services.gemini_key_manager import gemini_key_manager
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Configure Gemini API
-genai.configure(api_key=settings.GEMINI_API_KEY)
-
 
 class GeminiService:
-    """Service for interacting with Google Gemini AI."""
+    """Service for interacting with Google Gemini AI with automatic key rotation."""
     
     def __init__(self):
-        # Initialize Gemini 2.5 Flash model for chat/explanations
-        self.chat_model = genai.GenerativeModel('models/gemini-2.5-flash')
+        # Don't configure API key here - will be set per request via key manager
+        # Initialize Gemini 2.5 Flash model
+        self.model_name = 'models/gemini-2.5-flash'
+        logger.info(f"🚀 Gemini Service initialized with model: {self.model_name}")
+        logger.info(f"🔑 Using multi-key rotation: {gemini_key_manager.get_quota_status()['total_keys']} keys available")
         
         # Initialize embedding model
         self.embedding_model = 'models/text-embedding-004'
+    
+    def _get_model_with_available_key(self, retry_count: int = 0):
+        """
+        Get a GenerativeModel instance with an available API key.
+        
+        Args:
+            retry_count: Number of retries attempted (for recursive retry logic)
+        
+        Returns:
+            Tuple of (model, key_info) for error handling
+        """
+        if retry_count >= len(gemini_key_manager.keys):
+            # Tried all keys, none worked
+            raise Exception(
+                "❌ All Gemini API keys exhausted or rate limited! "
+                f"Total capacity: {gemini_key_manager.get_quota_status()['total_capacity']} requests/day. "
+                "Quotas reset at midnight Pacific Time."
+            )
+        
+        api_key = gemini_key_manager.get_available_key()
+        
+        if not api_key:
+            raise Exception(
+                "❌ All Gemini API keys exhausted! "
+                f"Total capacity: {gemini_key_manager.get_quota_status()['total_capacity']} requests/day. "
+                "Quotas reset at midnight Pacific Time."
+            )
+        
+        # Configure Gemini with the available key
+        genai.configure(api_key=api_key)
+        
+        # Return model instance with current key index for error handling
+        return genai.GenerativeModel(self.model_name), gemini_key_manager.current_key_index
     
     def generate_embedding(self, text: str) -> list[float]:
         """
@@ -49,7 +83,8 @@ class GeminiService:
         context: str, 
         question: str, 
         mode: str,
-        class_level: int = 6
+        class_level: int = 6,
+        retry_count: int = 0
     ) -> str:
         """
         Generate explanation using Gemini based on RAG context and mode.
@@ -59,6 +94,7 @@ class GeminiService:
             question: Student's highlighted text/question
             mode: Explanation mode (simple/meaning/story/example/summary)
             class_level: Student's class level (5-10)
+            retry_count: Number of retries attempted (internal use)
         
         Returns:
             Formatted explanation string
@@ -67,30 +103,62 @@ class GeminiService:
             # Build mode-specific prompt with class level
             prompt = self._build_prompt(context, question, mode, class_level)
             
+            # Get model with available API key
+            model, key_index = self._get_model_with_available_key(retry_count)
+            
             # Generate response
-            response = self.chat_model.generate_content(prompt)
+            response = model.generate_content(prompt)
             
             return response.text
         
         except Exception as e:
+            error_str = str(e)
+            
+            # Check if it's a 429 rate limit error
+            if "429" in error_str and retry_count < len(gemini_key_manager.keys):
+                logger.warning(f"⚠️  429 Rate limit hit. Rotating to next key (retry {retry_count + 1})...")
+                
+                # Force rotation to next key
+                gemini_key_manager.current_key_index = (gemini_key_manager.current_key_index + 1) % len(gemini_key_manager.keys)
+                
+                # Retry with next key
+                return self.format_explanation(context, question, mode, class_level, retry_count + 1)
+            
             logger.error(f"❌ Gemini explanation failed: {e}")
             raise
     
-    def generate_response(self, prompt: str) -> str:
+    def generate_response(self, prompt: str, retry_count: int = 0) -> str:
         """
-        Generate a simple text response from Gemini.
+        Generate a simple text response from Gemini with automatic retry on 429 errors.
         
         Args:
-            prompt: The prompt to send to Gemini
+            prompt: Input prompt
+            retry_count: Number of retries attempted (internal use)
         
         Returns:
             Generated text response
         """
         try:
-            response = self.chat_model.generate_content(prompt)
+            # Get model with available API key
+            model, key_index = self._get_model_with_available_key(retry_count)
+            
+            response = model.generate_content(prompt)
             return response.text
+        
         except Exception as e:
-            logger.error(f"❌ Gemini response generation failed: {e}")
+            error_str = str(e)
+            
+            # Check if it's a 429 rate limit error
+            if "429" in error_str and retry_count < len(gemini_key_manager.keys):
+                logger.warning(f"⚠️  429 Rate limit hit. Rotating to next key (retry {retry_count + 1})...")
+                
+                # Force rotation to next key
+                gemini_key_manager.current_key_index = (gemini_key_manager.current_key_index + 1) % len(gemini_key_manager.keys)
+                
+                # Retry with next key
+                return self.generate_response(prompt, retry_count + 1)
+            
+            logger.error(f"❌ Gemini generation failed: {e}")
             raise
     
     def _build_prompt(self, context: str, question: str, mode: str, class_level: int = 6) -> str:
@@ -201,10 +269,11 @@ MODE: SUMMARY (Class {class_level})
         num_questions: int,
         class_level: int,
         subject: str,
-        chapter: int
+        chapter: int,
+        retry_count: int = 0
     ) -> list[dict]:
         """
-        Generate concept-based MCQs using Gemini.
+        Generate concept-based MCQs using Gemini with automatic retry on 429 errors.
         
         Args:
             context: Full chapter/section text
@@ -212,6 +281,7 @@ MODE: SUMMARY (Class {class_level})
             class_level: Student's class (5-10)
             subject: Subject name
             chapter: Chapter number
+            retry_count: Number of retries attempted (internal use)
         
         Returns:
             List of MCQ dictionaries
@@ -245,7 +315,9 @@ OUTPUT FORMAT (JSON):
 
 Generate {num_questions} MCQs now in valid JSON format:"""
             
-            response = self.chat_model.generate_content(prompt)
+            # Get model with available API key
+            model, key_index = self._get_model_with_available_key(retry_count)
+            response = model.generate_content(prompt)
             
             # Parse JSON response
             import json
@@ -260,6 +332,18 @@ Generate {num_questions} MCQs now in valid JSON format:"""
             return mcqs
         
         except Exception as e:
+            error_str = str(e)
+            
+            # Check if it's a 429 rate limit error
+            if "429" in error_str and retry_count < len(gemini_key_manager.keys):
+                logger.warning(f"⚠️  429 Rate limit hit. Rotating to next key (retry {retry_count + 1})...")
+                
+                # Force rotation to next key
+                gemini_key_manager.current_key_index = (gemini_key_manager.current_key_index + 1) % len(gemini_key_manager.keys)
+                
+                # Retry with next key
+                return self.generate_mcqs(context, num_questions, class_level, subject, chapter, retry_count + 1)
+            
             logger.error(f"❌ MCQ generation failed: {e}")
             raise
     
@@ -268,16 +352,18 @@ Generate {num_questions} MCQs now in valid JSON format:"""
         questions_and_answers: list[dict],
         class_level: int,
         subject: str,
-        chapter: int
+        chapter: int,
+        retry_count: int = 0
     ) -> dict:
         """
-        Evaluate voice assessment answers using Gemini AI.
+        Evaluate voice assessment answers using Gemini AI with automatic retry on 429 errors.
         
         Args:
             questions_and_answers: List of {"question": str, "answer": str}
             class_level: Student's class
             subject: Subject name
             chapter: Chapter number
+            retry_count: Number of retries attempted (internal use)
         
         Returns:
             Evaluation result with score and feedback
@@ -319,7 +405,9 @@ OUTPUT FORMAT (JSON):
 
 Provide evaluation in JSON format:"""
             
-            response = self.chat_model.generate_content(prompt)
+            # Get model with available API key
+            model, key_index = self._get_model_with_available_key(retry_count)
+            response = model.generate_content(prompt)
             
             # Parse JSON response
             import json
@@ -333,25 +421,19 @@ Provide evaluation in JSON format:"""
             return evaluation
         
         except Exception as e:
+            error_str = str(e)
+            
+            # Check if it's a 429 rate limit error
+            if "429" in error_str and retry_count < len(gemini_key_manager.keys):
+                logger.warning(f"⚠️  429 Rate limit hit. Rotating to next key (retry {retry_count + 1})...")
+                
+                # Force rotation to next key
+                gemini_key_manager.current_key_index = (gemini_key_manager.current_key_index + 1) % len(gemini_key_manager.keys)
+                
+                # Retry with next key
+                return self.evaluate_assessment(questions_and_answers, class_level, subject, chapter, retry_count + 1)
+            
             logger.error(f"❌ Assessment evaluation failed: {e}")
-            raise
-    
-    def generate_response(self, prompt: str) -> str:
-        """
-        Generate a generic response from Gemini for any given prompt.
-        
-        Args:
-            prompt: The input prompt text
-        
-        Returns:
-            Generated response text
-        """
-        try:
-            response = self.chat_model.generate_content(prompt)
-            return response.text
-        
-        except Exception as e:
-            logger.error(f"❌ Gemini response generation failed: {e}")
             raise
 
 
