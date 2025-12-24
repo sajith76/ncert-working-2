@@ -690,6 +690,16 @@ Generate a {'comprehensive' if mode == 'deepdive' else 'clear and focused'} answ
             top_k=2
         )
         
+        # 🎯 CACHE HIT: Return cached answer directly if high similarity
+        if llm_chunks and llm_chunks[0]['score'] >= 0.95:
+            cached_answer = llm_chunks[0]['text']
+            logger.info(f"🎯 CACHE HIT! Using cached answer (similarity: {llm_chunks[0]['score']:.3f}, topic: {llm_chunks[0].get('topic', 'N/A')})")
+            logger.info(f"   Saved 1 Gemini API call (answer length: {len(cached_answer)} chars)")
+            
+            # Return cached answer with source information
+            source_chunks = textbook_chunks + llm_chunks
+            return cached_answer, source_chunks
+        
         # 3. Query web content
         web_chunks = self.query_web_content(
             query_text=question,
@@ -781,6 +791,16 @@ Generate a {'comprehensive' if mode == 'deepdive' else 'clear and focused'} answ
             top_k=3,
             similarity_threshold=0.65  # Lower threshold for annotation reuse
         )
+        
+        # 🎯 CACHE HIT: Return cached answer directly if high similarity
+        if llm_chunks and llm_chunks[0]['score'] >= 0.90:  # Slightly lower for annotations (0.90 vs 0.95)
+            cached_answer = llm_chunks[0]['text']
+            logger.info(f"🎯 CACHE HIT! Using cached answer (similarity: {llm_chunks[0]['score']:.3f}, topic: {llm_chunks[0].get('topic', 'N/A')})")
+            logger.info(f"   Saved 1 Gemini API call (answer length: {len(cached_answer)} chars)")
+            
+            # Return cached answer with source information
+            source_chunks = textbook_chunks + llm_chunks
+            return cached_answer, source_chunks
         
         # 3. Query web content (optional)
         web_chunks = self.query_web_content(
@@ -905,6 +925,16 @@ Keep it under 200 words and student-friendly."""
             subject=subject,
             top_k=3
         )
+        
+        # 🎯 CACHE HIT: Return cached answer directly if high similarity
+        if llm_chunks and llm_chunks[0]['score'] >= 0.95:
+            cached_answer = llm_chunks[0]['text']
+            logger.info(f"🎯 CACHE HIT! Using cached answer (similarity: {llm_chunks[0]['score']:.3f}, topic: {llm_chunks[0].get('topic', 'N/A')})")
+            logger.info(f"   Saved 1 Gemini API call (answer length: {len(cached_answer)} chars)")
+            
+            # Return cached answer with source information
+            source_chunks = textbook_chunks + llm_chunks
+            return cached_answer, source_chunks
         
         # 3. Query web content for additional context
         web_chunks = self.query_web_content(
