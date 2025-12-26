@@ -976,3 +976,13 @@ def get_question_sets_collection():
 def get_assessment_attempts_collection():
     """Get assessment attempts collection from MongoDB."""
     return mongodb.get_collection("assessment_attempts")
+
+
+def get_user_activities_collection():
+    """Get user activities collection from MongoDB (for streak tracking)."""
+    return mongodb.get_collection("user_activities")
+
+
+def get_users_collection():
+    """Get users collection from MongoDB (for user profiles)."""
+    return mongodb.get_collection("users")

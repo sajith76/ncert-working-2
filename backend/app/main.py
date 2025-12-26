@@ -102,9 +102,10 @@ app.include_router(notes.router, prefix="/api")
 app.include_router(assessment.router, prefix="/api")  # ✅ Voice Assessment
 app.include_router(annotation.router, prefix="/api")  # ✅ Annotation Chatbot
 
-# Import admin router
-from app.routers import admin
+# Import admin and user routers
+from app.routers import admin, user
 app.include_router(admin.router, prefix="/api")  # ✅ Admin & Monitoring
+app.include_router(user.router, prefix="/api")   # ✅ User Stats (Dashboard)
 
 
 # Root endpoint
