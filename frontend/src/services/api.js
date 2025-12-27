@@ -370,6 +370,404 @@ export const notesService = {
 };
 
 /**
+ * Test Service - AI and Staff Tests
+ */
+export const testService = {
+  // ==================== TOPIC-BASED TEST SELECTION ====================
+
+  /**
+   * Get available subjects for a class level
+   * @param {number} classLevel - Class level (5-12)
+   * @returns {Promise<array>} - List of subjects with chapter/question counts
+   */
+  async getAvailableSubjects(classLevel) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/test/subjects/${classLevel}`);
+      if (!response.ok) throw new Error(`Subjects API Error: ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Get Subjects Error:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Get chapters for a subject
+   * @param {number} classLevel - Class level
+   * @param {string} subject - Subject name
+   * @returns {Promise<array>} - List of chapters with topic/question counts
+   */
+  async getChaptersForSubject(classLevel, subject) {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/test/chapters/${classLevel}/${encodeURIComponent(subject)}`
+      );
+      if (!response.ok) throw new Error(`Chapters API Error: ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Get Chapters Error:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Get topics for a chapter with student performance
+   * @param {number} classLevel - Class level
+   * @param {string} subject - Subject name
+   * @param {number} chapterNumber - Chapter number
+   * @param {string} studentId - Student ID for performance data
+   * @returns {Promise<array>} - Topics with student scores and recommendations
+   */
+  async getTopicsForChapter(classLevel, subject, chapterNumber, studentId = null) {
+    try {
+      const params = studentId ? `?student_id=${studentId}` : '';
+      const response = await fetch(
+        `${API_BASE_URL}/api/test/topics/${classLevel}/${encodeURIComponent(subject)}/${chapterNumber}${params}`
+      );
+      if (!response.ok) throw new Error(`Topics API Error: ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Get Topics Error:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Get personalized topic recommendations for student
+   * @param {number} classLevel - Class level
+   * @param {string} subject - Subject name
+   * @param {string} studentId - Student ID
+   * @param {number} limit - Max recommendations
+   * @returns {Promise<array>} - Recommended topics based on weak areas
+   */
+  async getRecommendations(classLevel, subject, studentId, limit = 5) {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/test/recommendations/${classLevel}/${encodeURIComponent(subject)}/${studentId}?limit=${limit}`
+      );
+      if (!response.ok) throw new Error(`Recommendations API Error: ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Get Recommendations Error:", error);
+      return [];
+    }
+  },
+
+  // ==================== AI TEST SESSION ====================
+
+  /**
+   * Start a topic-based AI test
+   * @param {object} params - Test parameters
+   * @returns {Promise<{session_id, questions, time_limit}>}
+   */
+  async startTopicTest(params) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/test/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_id: params.studentId,
+          class_level: params.classLevel || 10,
+          subject: params.subject,
+          chapter_number: params.chapter_number,
+          topic_id: params.topic_id,
+          num_questions: params.num_questions || 5,
+          difficulty: params.difficulty || "mixed"
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Start Test Error: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Start Topic Test Error:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Submit a single answer during test
+   * @param {string} sessionId - Session ID
+   * @param {string} questionId - Question ID
+   * @param {number} questionNumber - Question number
+   * @param {string} answer - Student's answer
+   * @returns {Promise<{status: string}>}
+   */
+  async submitAnswer(sessionId, questionId, questionNumber, answer) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/test/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          question_id: questionId,
+          question_number: questionNumber,
+          answer: answer,
+        }),
+      });
+      
+      if (!response.ok) throw new Error(`Submit Answer Error: ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Submit Answer Error:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Complete test and get RAG-based evaluation
+   * @param {string} sessionId - Session ID
+   * @param {string} studentId - Student ID
+   * @returns {Promise<{score, evaluations, feedback, strengths, improvements}>}
+   */
+  async completeTest(sessionId, studentId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/test/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          student_id: studentId,
+        }),
+      });
+      
+      if (!response.ok) throw new Error(`Complete Test Error: ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Complete Test Error:", error);
+      throw error;
+    }
+  },
+
+  // ==================== LEGACY AI TEST ENDPOINTS (kept for compatibility) ====================
+
+  /**
+   * Get AI tests available
+   * @param {string} subject - Optional subject filter
+   * @param {number} chapter - Optional chapter filter
+   * @param {string} studentId - Student ID for best scores
+   * @returns {Promise<array>}
+   */
+  async getAITests(subject = null, chapter = null, studentId = null) {
+    try {
+      const params = new URLSearchParams();
+      if (subject) params.append("subject", subject);
+      if (chapter) params.append("chapter", chapter);
+      if (studentId) params.append("student_id", studentId);
+      
+      const url = `${API_BASE_URL}/api/test/ai-tests${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`AI Tests API Error: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("AI Tests API Error:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Start an AI test session (legacy)
+   * @param {string} testId - Test ID
+   * @param {string} studentId - Student ID
+   * @returns {Promise<{session_id, questions, time_limit}>}
+   */
+  async startAITest(testId, studentId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/test/ai-tests/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ test_id: testId, student_id: studentId }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Start AI Test API Error: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Start AI Test API Error:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Submit a single answer during AI test (legacy)
+   * @param {string} sessionId - Session ID
+   * @param {number} questionNumber - Question number
+   * @param {string} answer - Student's answer
+   * @returns {Promise<{status: string}>}
+   */
+  async submitAIAnswer(sessionId, questionNumber, answer) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/test/ai-tests/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          question_number: questionNumber,
+          answer: answer,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Submit Answer API Error: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Submit Answer API Error:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Complete AI test and get results (legacy)
+   * @param {string} sessionId - Session ID
+   * @param {string} studentId - Student ID
+   * @returns {Promise<{score, feedback, question_results, topics_to_review}>}
+   */
+  async completeAITest(sessionId, studentId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/test/ai-tests/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          student_id: studentId,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Complete AI Test API Error: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Complete AI Test API Error:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get staff-assigned tests
+   * @param {string} subject - Optional subject filter
+   * @param {number} chapter - Optional chapter filter
+   * @param {string} studentId - Student ID for submission status
+   * @returns {Promise<array>}
+   */
+  async getStaffTests(subject = null, chapter = null, studentId = null) {
+    try {
+      const params = new URLSearchParams();
+      if (subject) params.append("subject", subject);
+      if (chapter) params.append("chapter", chapter);
+      if (studentId) params.append("student_id", studentId);
+      
+      const url = `${API_BASE_URL}/api/test/staff-tests${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`Staff Tests API Error: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Staff Tests API Error:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Download question paper PDF
+   * @param {string} testId - Test ID
+   * @returns {string} - Download URL
+   */
+  getQuestionPaperUrl(testId) {
+    return `${API_BASE_URL}/api/test/staff-tests/${testId}/download`;
+  },
+
+  /**
+   * Upload answer sheet for a staff test
+   * @param {string} testId - Test ID
+   * @param {string} studentId - Student ID
+   * @param {File} file - PDF file to upload
+   * @returns {Promise<{submission_id, status, message}>}
+   */
+  async uploadAnswerSheet(testId, studentId, file) {
+    try {
+      const formData = new FormData();
+      formData.append("answer_sheet", file);
+      formData.append("student_id", studentId);
+      
+      const response = await fetch(`${API_BASE_URL}/api/test/staff-tests/${testId}/submit`, {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Upload Answer API Error: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Upload Answer API Error:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get test analytics for a student
+   * @param {string} studentId - Student ID
+   * @param {number} classLevel - Class level
+   * @param {string} subject - Optional subject filter
+   * @returns {Promise<{total_tests_taken, average_score, topic_breakdown, performance_history}>}
+   */
+  async getTestAnalytics(studentId, classLevel = 10, subject = null) {
+    try {
+      const params = new URLSearchParams();
+      params.append("class_level", classLevel);
+      if (subject) params.append("subject", subject);
+      
+      const response = await fetch(`${API_BASE_URL}/api/test/analytics/${studentId}?${params.toString()}`);
+      
+      if (!response.ok) {
+        throw new Error(`Test Analytics API Error: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Test Analytics API Error:", error);
+      return null;
+    }
+  },
+
+  /**
+   * Get question bank statistics
+   * @returns {Promise<{total_subjects, total_chapters, total_questions, breakdown}>}
+   */
+  async getQuestionBankStats() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/test/question-bank/stats`);
+      
+      if (!response.ok) {
+        throw new Error(`Question Bank Stats API Error: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Question Bank Stats API Error:", error);
+      return null;
+    }
+  },
+};
+
+/**
  * Utility: Check backend health
  */
 export const healthCheck = async () => {
@@ -387,5 +785,6 @@ export default {
   assessmentService,
   userStatsService,
   notesService,
+  testService,
   healthCheck,
 };

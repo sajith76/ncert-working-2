@@ -7,6 +7,10 @@ import OnboardingLayout from "./pages/onboarding/OnboardingLayout";
 import Dashboard from "./pages/Dashboard";
 import BookToBot from "./pages/BookToBot";
 import Settings from "./pages/Settings";
+import TestCenter from "./pages/TestCenter";
+import TestSession from "./pages/TestSession";
+import TestResult from "./pages/TestResult";
+import ReportCard from "./pages/ReportCard";
 import "./App.css";
 
 /**
@@ -74,31 +78,6 @@ function PublicRoute({ children }) {
   return children;
 }
 
-// Placeholder components for new routes
-function TestPage() {
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Test Center</h1>
-        <p className="text-gray-500">Coming soon! Take tests to track your progress.</p>
-        {/* TODO: Backend Integration - Fetch available tests */}
-      </div>
-    </div>
-  );
-}
-
-function ReportCardPage() {
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Report Card</h1>
-        <p className="text-gray-500">Coming soon! View your detailed performance reports.</p>
-        {/* TODO: Backend Integration - Fetch user's test results and analytics */}
-      </div>
-    </div>
-  );
-}
-
 // Settings page is now imported from ./pages/Settings
 
 function App() {
@@ -163,7 +142,23 @@ function App() {
           path="/test"
           element={
             <ProtectedRoute>
-              <TestPage />
+              <TestCenter />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/test-session"
+          element={
+            <ProtectedRoute>
+              <TestSession />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/test-result"
+          element={
+            <ProtectedRoute>
+              <TestResult />
             </ProtectedRoute>
           }
         />
@@ -171,7 +166,7 @@ function App() {
           path="/report-card"
           element={
             <ProtectedRoute>
-              <ReportCardPage />
+              <ReportCard />
             </ProtectedRoute>
           }
         />

@@ -18,7 +18,6 @@ import AIPanel from "../annotations/AIPanel";
 import NotesPanel from "../annotations/NotesPanel";
 import HistoryPanel from "../annotations/HistoryPanel";
 import HighlightOverlay from "../annotations/HighlightOverlay";
-import VoiceAssessment from "../assessment/VoiceAssessment";
 
 import ErrorBoundary from "../../components/ErrorBoundary";
 
@@ -41,8 +40,6 @@ export default function PDFViewer({ pdfUrl, currentLesson }) {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [direction, setDirection] = useState("next"); // 'next' or 'prev'
   const [pagesCompleted, setPagesCompleted] = useState(0);
-  const [showAssessment, setShowAssessment] = useState(false);
-  const [lastAssessmentPage, setLastAssessmentPage] = useState(0);
   const [showAnnotations, setShowAnnotations] = useState(true);
 
   const setSelectedText = useAnnotationStore((state) => state.setSelectedText);
@@ -145,12 +142,6 @@ export default function PDFViewer({ pdfUrl, currentLesson }) {
         // Track page completion
         if (nextPage > pagesCompleted) {
           setPagesCompleted(nextPage);
-
-          // Check if assessment should trigger (every 4 pages)
-          if (nextPage - lastAssessmentPage >= 4) {
-            setTimeout(() => setShowAssessment(true), 500);
-            setLastAssessmentPage(nextPage);
-          }
         }
         return nextPage;
       });
@@ -181,30 +172,8 @@ export default function PDFViewer({ pdfUrl, currentLesson }) {
     setSelectedText(null);
   };
 
-  const handleAssessmentComplete = (score) => {
-    setShowAssessment(false);
-    // TODO: Save assessment score to backend
-    // POST /api/assessments/scores
-    // Body: { lessonId, score, completedAt: new Date().toISOString() }
-    console.log("Assessment completed with score:", score);
-  };
-
-  const handleAssessmentClose = () => {
-    setShowAssessment(false);
-  };
-
   return (
     <div className="flex flex-col h-full relative ">
-      {/* Voice Assessment Modal */}
-      {showAssessment && (
-        <VoiceAssessment
-          lessonId={currentLesson?.id}
-          onComplete={handleAssessmentComplete}
-          onClose={handleAssessmentClose}
-        />
-      )}
-
-      {/* Selection Dialog */}
       {/* Selection Dialog */}
       <SelectionDialog
         position={dialogPosition}
