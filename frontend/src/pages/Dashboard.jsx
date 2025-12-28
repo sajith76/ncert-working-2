@@ -73,10 +73,10 @@ export default function Dashboard() {
               Ready to continue your learning journey?
             </p>
           </div>
-          
+
           {/* Notification Bell */}
           <div className="relative">
-            <button 
+            <button
               onClick={() => setShowNotifications(!showNotifications)}
               className="p-3 bg-white rounded-full shadow-sm hover:shadow-md transition relative"
             >
@@ -87,14 +87,14 @@ export default function Dashboard() {
                 </span>
               )}
             </button>
-            
+
             {/* Notifications Dropdown */}
             {showNotifications && (
               <div className="absolute right-0 top-14 w-80 bg-white rounded-2xl shadow-xl z-50 max-h-96 overflow-hidden border border-gray-100">
                 <div className="p-4 border-b bg-gray-50">
                   <div className="flex justify-between items-center">
                     <h3 className="font-semibold text-gray-800">Notifications</h3>
-                    <button 
+                    <button
                       onClick={() => { navigate("/support-tickets"); setShowNotifications(false); }}
                       className="text-xs text-blue-600 hover:underline"
                     >
@@ -110,7 +110,7 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     notifications.slice(0, 5).map(n => (
-                      <div 
+                      <div
                         key={n.id}
                         onClick={() => {
                           markNotificationRead(n.id);
@@ -139,10 +139,10 @@ export default function Dashboard() {
               <ProgressCard />
               <StreakCard />
             </div>
-            
+
             {/* Quote Card - Full Width */}
             <QuoteCard />
-            
+
             {/* Notes Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <NotesDeckCard />
@@ -153,9 +153,9 @@ export default function Dashboard() {
           {/* Right Column - Support */}
           <div className="space-y-6">
             <SupportCard />
-            
+
             {/* My Tests Card */}
-            <div 
+            <div
               onClick={() => navigate("/my-tests")}
               className="bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl p-6 shadow-sm cursor-pointer hover:shadow-md transition"
             >
@@ -167,7 +167,7 @@ export default function Dashboard() {
                 <span className="text-3xl">→</span>
               </div>
             </div>
-            
+
             {/* Quick Stats Card */}
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Stats</h3>

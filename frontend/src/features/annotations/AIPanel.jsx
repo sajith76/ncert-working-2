@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, FileText, BookOpen } from "lucide-react";
+import { Sparkles, FileText, BookOpen, Download } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -13,6 +13,7 @@ import useAnnotationStore from "../../stores/annotationStore";
 import useUserStore from "../../stores/userStore";
 import { chatService } from "../../services/api";
 import ReactMarkdown from "react-markdown";
+import { exportChatAsDoc } from "../../utils/chatExport";
 
 /**
  * AI Panel Component - Backend Connected
@@ -79,7 +80,7 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
         effectiveSubject,
         currentLesson?.number || 1
       );
-      
+
       console.log("✅ Backend response received:", result);
       setResponse(result.answer);
       setIsProcessing(false);
@@ -112,6 +113,34 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
     setResponse("");
     setImageUrl(null);
     onClose();
+  };
+
+  // Download AI response as document
+  const handleDownload = () => {
+    if (!response && !imageUrl) return;
+
+    const actionLabel = AI_ACTIONS.find((a) => a.id === selectedAction)?.label || "AI Response";
+    const messages = [
+      {
+        role: "user",
+        content: `Selected text: "${selectedText?.text || ""}"
+
+Action: ${actionLabel}`,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        role: "assistant",
+        content: response || "[Visual diagram generated]",
+        timestamp: new Date().toISOString(),
+      },
+    ];
+
+    exportChatAsDoc(messages, {
+      filename: `AI-${actionLabel}-${Date.now()}.doc`,
+      title: `AI ${actionLabel} - ${currentLesson?.title || "PDF Annotation"}`,
+      userName: "Your Question",
+      aiName: "AI Response",
+    });
   };
 
   return (
@@ -211,9 +240,9 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
                   </div>
                 ) : imageUrl ? (
                   <div className="space-y-3">
-                    <img 
-                      src={imageUrl} 
-                      alt="Concept Flow Diagram" 
+                    <img
+                      src={imageUrl}
+                      alt="Concept Flow Diagram"
                       className="w-full rounded-lg border shadow-sm"
                     />
                     {response && (
@@ -245,6 +274,15 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
                     onClick={handleSave}
                   >
                     Save Annotation
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleDownload}
+                    title="Download as document"
+                    className="shrink-0"
+                  >
+                    <Download className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="outline"

@@ -274,7 +274,7 @@ export default function StudentChatbot({ currentLesson }) {
                     ? "Ask a direct question..."
                     : "Ask anything for deep explanation..."
                 }
-                className="flex-1 rounded-xl border-gray-300 focus:border-violet-500 focus:ring-violet-500"
+                className="flex-shrink-0flex-1 rounded-xl border-gray-300 focus:border-violet-500 focus:ring-violet-500"
                 disabled={isTyping}
               />
               <Button

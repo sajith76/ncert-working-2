@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import PDFViewer from "../features/pdf/PDFViewer";
 import LessonNavigation from "../features/lessons/LessonNavigation";
 import UserSettingsPanel from "../components/UserSettingsPanel";
 import ChatbotPanel from "../components/dashboard/ChatbotPanel";
 import { getLessonsBySubject, SUBJECTS_WITH_RAG } from "../constants/lessons";
-import { Menu, X, Settings, MessageCircle, AlertTriangle } from "lucide-react";
+import { Menu, X, Settings, MessageCircle, AlertTriangle, ArrowLeft } from "lucide-react";
 import { Button } from "../components/ui/button";
 import useUserStore from "../stores/userStore";
 
@@ -22,21 +23,22 @@ import useUserStore from "../stores/userStore";
  */
 
 function BookToBot() {
+  const navigate = useNavigate();
   const { user } = useUserStore();
-  
+
   // Get lessons based on user's preferred subject
   const lessons = useMemo(() => {
     return getLessonsBySubject(user.preferredSubject);
   }, [user.preferredSubject]);
-  
+
   const [currentLesson, setCurrentLesson] = useState(lessons[0]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatbotOpen, setChatbotOpen] = useState(false);
-  
+
   // Check if current subject has AI/RAG support
   const hasAISupport = SUBJECTS_WITH_RAG.includes(user.preferredSubject);
-  
+
   // Update current lesson when subject changes
   useEffect(() => {
     const newLessons = getLessonsBySubject(user.preferredSubject);
@@ -51,9 +53,8 @@ function BookToBot() {
     <div className="flex h-screen w-screen overflow-hidden bg-background">
       {/* Sidebar - Lesson Navigation */}
       <div
-        className={`flex-shrink-0 transition-all duration-300 ease-in-out ${
-          sidebarOpen ? "w-80" : "w-0"
-        } overflow-hidden border-r`}
+        className={`flex-shrink-0 transition-all duration-300 ease-in-out ${sidebarOpen ? "w-80" : "w-0"
+          } overflow-hidden border-r`}
       >
         <LessonNavigation
           lessons={lessons}
@@ -69,14 +70,27 @@ function BookToBot() {
           <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
             <p className="text-sm text-amber-800">
-              AI features are not available for {user.preferredSubject} yet. 
+              AI features are not available for {user.preferredSubject} yet.
               Switch to <strong>Mathematics</strong> in Settings for full AI support.
             </p>
           </div>
         )}
-        
+
         {/* Header */}
         <div className="px-6 py-4 border-b bg-card flex items-center gap-4">
+          {/* Back to Dashboard Button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/student')}
+            className="hover:bg-primary/10 gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Dashboard</span>
+          </Button>
+
+          <div className="w-px h-6 bg-border" />
+
           {/* Toggle Sidebar Button */}
           <Button
             variant="ghost"
@@ -108,7 +122,7 @@ function BookToBot() {
               <p className="text-xs text-muted-foreground">Class {user.classLevel}</p>
               <p className="text-xs font-medium">{user.preferredSubject}</p>
             </div>
-            
+
             {/* AI Chatbot Button */}
             <Button
               variant="default"

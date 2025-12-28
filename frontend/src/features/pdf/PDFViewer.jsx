@@ -128,8 +128,8 @@ export default function PDFViewer({ pdfUrl, currentLesson }) {
     setIsTransitioning(true);
     setTimeout(() => {
       setPageNumber((prev) => Math.max(prev - 1, 1));
-      setTimeout(() => setIsTransitioning(false), 100);
-    }, 300);
+      setTimeout(() => setIsTransitioning(false), 150);
+    }, 200);
   };
 
   const goToNextPage = () => {
@@ -145,8 +145,8 @@ export default function PDFViewer({ pdfUrl, currentLesson }) {
         }
         return nextPage;
       });
-      setTimeout(() => setIsTransitioning(false), 100);
-    }, 300);
+      setTimeout(() => setIsTransitioning(false), 150);
+    }, 200);
   };
 
   const zoomIn = () => {
@@ -264,23 +264,18 @@ export default function PDFViewer({ pdfUrl, currentLesson }) {
       </div>
 
       {/* PDF Content */}
-      <div className="flex-1  overflow-auto bg-muted/30 p-4">
+      <div className="flex-1 overflow-auto bg-gradient-to-b from-muted/20 to-muted/40 p-6">
         <div
-          className="flex justify-center relative"
+          className="flex justify-center relative book-container"
           onMouseUp={handleTextSelection}
         >
           <div
-            className={`relative transition-all duration-500 ease-out  ${
-              isTransitioning
-                ? direction === "next"
-                  ? "page-turn-next"
-                  : "page-turn-prev"
-                : "page-turn-idle"
-            }`}
-            style={{
-              transformStyle: "preserve-3d",
-              perspective: "1000px",
-            }}
+            className={`relative transition-all duration-300 ease-out ${isTransitioning
+              ? direction === "next"
+                ? "page-turn-next"
+                : "page-turn-prev"
+              : "page-turn-idle"
+              }`}
           >
             <Document
               file={pdfUrl}
@@ -300,7 +295,7 @@ export default function PDFViewer({ pdfUrl, currentLesson }) {
               <Page
                 pageNumber={pageNumber}
                 scale={scale}
-                className="shadow-2xl rounded-lg overflow-hidden"
+                className="pdf-page-shadow rounded-lg overflow-hidden"
                 renderTextLayer={true}
                 renderAnnotationLayer={true}
               />

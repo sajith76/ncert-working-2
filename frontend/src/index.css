@@ -63,31 +63,17 @@ body {
   color: hsl(var(--foreground));
 }
 
-/* Minimal Page Turn Animation */
-@keyframes simplePageTurn {
-  0% {
-    transform: rotateY(0deg);
-    opacity: 1;
-  }
-  100% {
-    transform: rotateY(-15deg) scale(0.98);
-    opacity: 0.7;
-  }
-}
-
-/* Minimal classes for page content */
+/* Clean page transition - no 3D effects */
 .page-turn {
-  animation: simplePageTurn 0.4s cubic-bezier(0.4,0,0.2,1);
-  will-change: transform, opacity;
+  will-change: opacity;
 }
 
-.page { /* Optional: minimal styling for page wrapper */
+.page {
   background: hsl(var(--card));
   color: hsl(var(--card-foreground));
   overflow: hidden;
   padding: 2rem;
   margin: 1rem auto;
-  
 }
 
   .space-grotesk-500 {
@@ -175,4 +161,202 @@ body {
   visibility: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
+}
+
+/* ===== BOOK TO BOT ENHANCEMENTS ===== */
+
+/* Minimal Page Transition Animations - Clean fade and slide */
+@keyframes pageSlideNext {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  40% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  60% {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pageSlidePrev {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  40% {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  60% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.page-turn-next {
+  animation: pageSlideNext 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-turn-prev {
+  animation: pageSlidePrev 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-turn-idle {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* Book Container - Clean minimal style */
+.book-container {
+  position: relative;
+}
+
+/* Glassmorphism Effect */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass {
+  background: rgba(30, 30, 30, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Annotation Hint Tooltip */
+.annotation-hint {
+  position: fixed;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #1a1a1a 0%, #333 100%);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  z-index: 100;
+  transform: translate(-50%, -100%) translateY(-12px);
+  animation: hintFadeIn 0.2s ease-out;
+}
+
+.annotation-hint::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #333;
+}
+
+@keyframes hintFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -100%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%) translateY(-12px);
+  }
+}
+
+/* Bookmark Ribbon Tags */
+.bookmark-ribbon {
+  position: absolute;
+  right: -5px;
+  padding: 8px 12px 8px 16px;
+  border-radius: 4px 0 0 4px;
+  box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 20;
+}
+
+.bookmark-ribbon::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: -5px;
+  border-left: 5px solid transparent;
+  border-bottom: 5px solid;
+}
+
+.bookmark-ribbon:hover {
+  transform: translateX(-4px);
+  box-shadow: -4px 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.bookmark-ribbon.ai {
+  background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);
+  color: white;
+}
+
+.bookmark-ribbon.ai::before {
+  border-bottom-color: #5b21b6;
+}
+
+.bookmark-ribbon.note {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  color: white;
+}
+
+.bookmark-ribbon.note::before {
+  border-bottom-color: #047857;
+}
+
+/* PDF Page Shadow Enhancement */
+.pdf-page-shadow {
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06),
+    0 20px 40px -10px rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+/* Selection Dialog Enhancement */
+.selection-dialog {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+.dark .selection-dialog {
+  background: rgba(30, 30, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Subtle button hover animations */
+.btn-hover-lift {
+  transition: all 0.2s ease;
+}
+
+.btn-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Text selection highlight style */
+::selection {
+  background: rgba(124, 58, 237, 0.3);
+}
+
+/* PDF text layer selection enhancement */
+.react-pdf__Page__textContent ::selection {
+  background: rgba(124, 58, 237, 0.35);
 }
