@@ -76,10 +76,14 @@ export default function TopicSelector({
     setSelectedSubject(subject);
     setLoading(true);
     try {
+      console.log("Fetching chapters for:", { classLevel, subject: subject.subject });
       const [chapterData, recsData] = await Promise.all([
         testService.getChaptersForSubject(classLevel, subject.subject),
         testService.getRecommendations(classLevel, subject.subject, studentId)
       ]);
+      
+      console.log("Chapters received:", chapterData);
+      console.log("Recommendations received:", recsData);
       
       setChapters(Array.isArray(chapterData) ? chapterData : []);
       setRecommendations(Array.isArray(recsData) ? recsData : []);

@@ -656,27 +656,52 @@ export const testService = {
   },
 
   /**
-   * Get staff-assigned tests
-   * @param {string} subject - Optional subject filter
-   * @param {number} chapter - Optional chapter filter
-   * @param {string} studentId - Student ID for submission status
+   * Get staff-assigned tests for a student
+   * @param {string} subject - Optional subject filter (not used, kept for compatibility)
+   * @param {number} chapter - Optional chapter filter (not used, kept for compatibility)
+   * @param {string} studentId - Student ID for getting tests for their class
    * @returns {Promise<array>}
    */
   async getStaffTests(subject = null, chapter = null, studentId = null) {
     try {
-      const params = new URLSearchParams();
-      if (subject) params.append("subject", subject);
-      if (chapter) params.append("chapter", chapter);
-      if (studentId) params.append("student_id", studentId);
+      if (!studentId) {
+        console.error("Student ID is required");
+        return [];
+      }
       
-      const url = `${API_BASE_URL}/api/test/staff-tests${params.toString() ? '?' + params.toString() : ''}`;
+      const url = `${API_BASE_URL}/api/tests/student/${studentId}`;
       const response = await fetch(url);
       
       if (!response.ok) {
         throw new Error(`Staff Tests API Error: ${response.statusText}`);
       }
       
-      return await response.json();
+      const data = await response.json();
+      
+      // Backend returns array directly
+      if (Array.isArray(data)) {
+        return data.map(test => ({
+          id: test.id,
+          title: test.title,
+          description: test.description,
+          subject: test.subject,
+          class_level: test.class_level,
+          pdf_filename: test.pdf_filename,
+          pdf_url: test.pdf_url,
+          start_date: test.start_datetime,  // Map from start_datetime
+          due_date: test.end_datetime,      // Map from end_datetime
+          created_at: test.created_at,
+          created_by: test.created_by,
+          status: test.status || 'active',
+          is_timed: test.is_timed,
+          has_submitted: test.has_submitted,
+          submission_id: test.submission_id,
+          submission_date: test.submission_date,
+          has_feedback: test.has_feedback
+        }));
+      }
+      
+      return [];
     } catch (error) {
       console.error("Staff Tests API Error:", error);
       return [];
@@ -685,11 +710,11 @@ export const testService = {
 
   /**
    * Download question paper PDF
-   * @param {string} testId - Test ID
+   * @param {string} filename - PDF filename
    * @returns {string} - Download URL
    */
-  getQuestionPaperUrl(testId) {
-    return `${API_BASE_URL}/api/test/staff-tests/${testId}/download`;
+  getQuestionPaperUrl(filename) {
+    return `${API_BASE_URL}/api/tests/pdf/${filename}`;
   },
 
   /**
@@ -697,15 +722,16 @@ export const testService = {
    * @param {string} testId - Test ID
    * @param {string} studentId - Student ID
    * @param {File} file - PDF file to upload
-   * @returns {Promise<{submission_id, status, message}>}
+   * @returns {Promise<{success, submission_id, message}>}
    */
   async uploadAnswerSheet(testId, studentId, file) {
     try {
       const formData = new FormData();
-      formData.append("answer_sheet", file);
+      formData.append("submission_file", file);
+      formData.append("test_id", testId);
       formData.append("student_id", studentId);
       
-      const response = await fetch(`${API_BASE_URL}/api/test/staff-tests/${testId}/submit`, {
+      const response = await fetch(`${API_BASE_URL}/api/tests/submit`, {
         method: "POST",
         body: formData,
       });

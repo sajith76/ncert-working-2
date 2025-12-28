@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+﻿import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import useUserStore from "./stores/userStore";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -11,38 +11,53 @@ import TestCenter from "./pages/TestCenter";
 import TestSession from "./pages/TestSession";
 import TestResult from "./pages/TestResult";
 import ReportCard from "./pages/ReportCard";
+import AdminDashboard from "./pages/AdminDashboard";
+import StaffTests from "./pages/StaffTests";
+import SupportTickets from "./pages/SupportTickets";
+import StudentManagement from "./pages/StudentManagement";
+import CreateTest from "./pages/CreateTest";
+import TestManagement from "./pages/TestManagement";
+import StudentTests from "./pages/StudentTests";
 import "./App.css";
 
-/**
- * Main App Component - Entry Point with Routing
- *
- * Routes:
- * - / → Login (with role selection)
- * - /signup → Student signup
- * - /teacher → Teacher placeholder
- * - /onboarding → Student onboarding flow
- * - /dashboard → Main dashboard hub
- * - /book-to-bot → PDF viewer interface
- * - /test → Test page (placeholder)
- * - /report-card → Report card (placeholder)
- * - /about-you → Customize onboarding
- *
- * TODO: Backend Integration
- * - Add token refresh on app mount
- * - Verify auth state with backend
- * - Add global error boundary
- */
-
-// Protected Route wrapper
+// Protected Route wrapper - For authenticated users
 function ProtectedRoute({ children }) {
   const { isAuthenticated, user } = useUserStore();
 
+  console.log("ProtectedRoute - isAuth:", isAuthenticated, "user:", user);
+
   if (!isAuthenticated) {
+    console.log("Not authenticated, redirecting to /");
     return <Navigate to="/" replace />;
   }
 
-  if (!user.isOnboarded) {
-    return <Navigate to="/onboarding" replace />;
+  // Admin should only access admin routes
+  if (user.role === "admin") {
+    const path = window.location.pathname;
+    const adminRoutes = ["/admin-dashboard", "/student-management", "/support-tickets", "/staff-tests", "/create-test", "/test-management"];
+    const isAdminRoute = adminRoutes.some(route => path.startsWith(route));
+    if (!isAdminRoute) {
+      console.log("Admin trying to access non-admin route, redirecting to /admin-dashboard");
+      return <Navigate to="/admin-dashboard" replace />;
+    }
+  }
+
+  // Teacher should only access teacher routes
+  if (user.role === "teacher") {
+    const path = window.location.pathname;
+    if (!path.startsWith("/staff-tests") && path !== "/support-tickets") {
+      console.log("Teacher trying to access non-teacher route, redirecting to /staff-tests");
+      return <Navigate to="/staff-tests" replace />;
+    }
+  }
+
+  // Students need onboarding first
+  if (user.role === "student" && !user.isOnboarded) {
+    const path = window.location.pathname;
+    if (path !== "/onboarding") {
+      console.log("Student not onboarded, redirecting to /onboarding");
+      return <Navigate to="/onboarding" replace />;
+    }
   }
 
   return children;
@@ -52,11 +67,25 @@ function ProtectedRoute({ children }) {
 function OnboardingRoute({ children }) {
   const { isAuthenticated, user } = useUserStore();
 
+  console.log("OnboardingRoute - isAuth:", isAuthenticated, "user:", user);
+
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
   }
 
+  // Admin/Teacher should not be in onboarding
+  if (user.role === "admin") {
+    console.log("Admin in onboarding, redirecting to /admin-dashboard");
+    return <Navigate to="/admin-dashboard" replace />;
+  }
+
+  if (user.role === "teacher") {
+    console.log("Teacher in onboarding, redirecting to /staff-tests");
+    return <Navigate to="/staff-tests" replace />;
+  }
+
   if (user.isOnboarded) {
+    console.log("Student already onboarded, redirecting to /dashboard");
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -67,10 +96,26 @@ function OnboardingRoute({ children }) {
 function PublicRoute({ children }) {
   const { isAuthenticated, user } = useUserStore();
 
+  console.log("PublicRoute - isAuth:", isAuthenticated, "user:", user);
+
   if (isAuthenticated) {
+    // Route based on role
+    if (user.role === "admin") {
+      console.log("Admin logged in, redirecting to /admin-dashboard");
+      return <Navigate to="/admin-dashboard" replace />;
+    }
+    
+    if (user.role === "teacher") {
+      console.log("Teacher logged in, redirecting to /staff-tests");
+      return <Navigate to="/staff-tests" replace />;
+    }
+    
+    // Students
     if (user.isOnboarded) {
+      console.log("Student onboarded, redirecting to /dashboard");
       return <Navigate to="/dashboard" replace />;
     } else {
+      console.log("Student not onboarded, redirecting to /onboarding");
       return <Navigate to="/onboarding" replace />;
     }
   }
@@ -78,7 +123,24 @@ function PublicRoute({ children }) {
   return children;
 }
 
-// Settings page is now imported from ./pages/Settings
+// Admin/Staff Route wrapper
+function StaffRoute({ children }) {
+  const { isAuthenticated, user } = useUserStore();
+
+  console.log("StaffRoute - isAuth:", isAuthenticated, "user:", user);
+
+  if (!isAuthenticated) {
+    console.log("Not authenticated, redirecting to /");
+    return <Navigate to="/" replace />;
+  }
+
+  if (user.role !== "admin" && user.role !== "teacher") {
+    console.log("Not admin/teacher, redirecting to /dashboard");
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+}
 
 function App() {
   return (
@@ -121,7 +183,7 @@ function App() {
           }
         />
 
-        {/* Protected Routes */}
+        {/* Student Protected Routes */}
         <Route
           path="/dashboard"
           element={
@@ -175,6 +237,68 @@ function App() {
           element={
             <ProtectedRoute>
               <Settings />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Admin/Staff Routes */}
+        <Route
+          path="/admin-dashboard"
+          element={
+            <StaffRoute>
+              <AdminDashboard />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/student-management"
+          element={
+            <StaffRoute>
+              <StudentManagement />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff-tests"
+          element={
+            <StaffRoute>
+              <StaffTests />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/support-tickets"
+          element={
+            <ProtectedRoute>
+              <SupportTickets />
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* Admin Test Management Routes */}
+        <Route
+          path="/create-test"
+          element={
+            <StaffRoute>
+              <CreateTest />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/test-management"
+          element={
+            <StaffRoute>
+              <TestManagement />
+            </StaffRoute>
+          }
+        />
+        
+        {/* Student Test Routes */}
+        <Route
+          path="/my-tests"
+          element={
+            <ProtectedRoute>
+              <StudentTests />
             </ProtectedRoute>
           }
         />

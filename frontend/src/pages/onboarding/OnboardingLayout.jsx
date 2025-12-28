@@ -6,6 +6,8 @@ import AvatarUsername from './AvatarUsername';
 import ExamCalendar from './ExamCalendar';
 import useUserStore from '../../stores/userStore';
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 /**
  * OnboardingLayout Component
  * 
@@ -15,14 +17,6 @@ import useUserStore from '../../stores/userStore';
  * Step 2: Previous Academics (OPTIONAL) - subjects, marks
  * Step 3: Avatar & Username (OPTIONAL) - DiceBear avatar customization
  * Step 4: Exam Calendar (OPTIONAL) - add exam dates
- * 
- * TODO: Backend Integration
- * - Save onboarding progress after each step
- * - POST /api/onboarding/profile
- * - POST /api/onboarding/academics
- * - POST /api/onboarding/avatar
- * - POST /api/onboarding/calendar
- * - PUT /api/user/complete-onboarding
  */
 
 const STEPS = [
@@ -87,17 +81,31 @@ function OnboardingLayout() {
     }
   };
 
-  const completeOnboarding = () => {
-    /**
-     * TODO: Backend Integration
-     * Send all onboarding data to backend:
-     * 
-     * await fetch('/api/user/complete-onboarding', {
-     *   method: 'PUT',
-     *   headers: { 'Content-Type': 'application/json' },
-     *   body: JSON.stringify({ onboardingData })
-     * });
-     */
+  const completeOnboarding = async () => {
+    try {
+      // Save onboarding data to backend
+      const response = await fetch(`${API_BASE}/api/auth/complete-onboarding`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.user_id,
+          profile: onboardingData.profile,
+          academics: onboardingData.academics,
+          avatar: onboardingData.avatar,
+          calendar: onboardingData.calendar
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!data.success) {
+        console.error("Failed to save onboarding:", data.error);
+        // Still update locally and continue even if backend fails
+      }
+    } catch (error) {
+      console.error("Onboarding save error:", error);
+      // Continue even if backend fails
+    }
 
     // Update user store with onboarding data
     setUser({

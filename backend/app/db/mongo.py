@@ -17,7 +17,7 @@ class MongoDB:
     """MongoDB Atlas connection manager."""
     
     def __init__(self):
-        self.client: AsyncIOMotorClient = None
+        self.client = None  # AsyncIOMotorClient instance
         self.db = None
     
     async def connect(self):
@@ -45,8 +45,83 @@ class MongoDB:
         return self.db[collection_name]
 
 
-# Global MongoDB instance
+# Global MongoDB instance (Async)
 mongodb = MongoDB()
+
+
+# ==================== SYNCHRONOUS MONGODB (for auth.py and admin) ====================
+
+class SyncMongoDB:
+    """
+    Synchronous MongoDB client for routes that need blocking operations.
+    Used by auth.py and admin_dashboard.py for user management.
+    """
+    
+    def __init__(self):
+        self._client = None
+        self._db = None
+    
+    @property
+    def client(self):
+        """Lazy initialization of MongoDB client."""
+        if self._client is None:
+            self._client = MongoClient(settings.MONGO_URI)
+            self._db = self._client.ncert_learning_db
+            logger.info("Sync MongoDB client initialized")
+        return self._client
+    
+    @property
+    def db(self):
+        """Get the database instance."""
+        if self._db is None:
+            self.client  # Initialize client
+        return self._db
+    
+    @property
+    def users(self):
+        """Get users collection."""
+        return self.db.users
+    
+    @property
+    def support_tickets(self):
+        """Get support tickets collection."""
+        return self.db.support_tickets
+    
+    @property
+    def student_counters(self):
+        """Get student counters collection for ID generation."""
+        return self.db.student_counters
+    
+    @property
+    def tests(self):
+        """Get tests collection for test management."""
+        return self.db.tests
+    
+    @property
+    def test_submissions(self):
+        """Get test submissions collection."""
+        return self.db.test_submissions
+    
+    @property
+    def notifications(self):
+        """Get notifications collection."""
+        return self.db.notifications
+    
+    def get_collection(self, name: str):
+        """Get a collection by name."""
+        return self.db[name]
+    
+    def close(self):
+        """Close the connection."""
+        if self._client:
+            self._client.close()
+            self._client = None
+            self._db = None
+            logger.info("Sync MongoDB client closed")
+
+
+# Global Sync MongoDB instance
+db = SyncMongoDB()
 
 
 # ==================== PINECONE VECTOR DATABASE ====================

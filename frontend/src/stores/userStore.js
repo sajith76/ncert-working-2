@@ -23,7 +23,7 @@ const useUserStore = create(
         id: null,
         name: "",
         email: "",
-        classLevel: 6, // Default to Class 6 (matches our Math PDFs)
+        classLevel: 10, // Default to Class 10 (matches our sample questions)
         preferredSubject: "Mathematics", // Default to Mathematics (has RAG support)
         role: null, // 'student' | 'teacher'
         isOnboarded: false,
