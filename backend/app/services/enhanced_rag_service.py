@@ -14,7 +14,7 @@ from app.services.web_scraper_service import web_scraper_service
 import logging
 import re
 from typing import List, Dict, Tuple, Optional
-from sentence_transformers import SentenceTransformer
+import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +41,8 @@ class EnhancedRAGService:
         
         # CRITICAL FIX: Use same embedding model as data upload
         # Data was uploaded using sentence-transformers, so we must use it for queries too!
-        self.embedding_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
-        logger.info("✅ RAG Service: Using sentence-transformers/all-mpnet-base-v2 for embeddings")
+        self.embedding_model_name = 'models/text-embedding-004'
+        logger.info("✅ RAG Service: Using Gemini text-embedding-004 for embeddings")
         logger.info("✅ Triple-Index System: Textbook + Web + LLM content")
         
         # Subject to namespace mapping for ncert-all-subjects index
@@ -74,7 +74,30 @@ class EnhancedRAGService:
             "English": list(range(5, 13)),       # Class 5-12
             "Hindi": list(range(5, 13))          # Class 5-12
         }
-    
+
+    def generate_embedding(self, text: str) -> List[float]:
+        """Generate embedding using Gemini text-embedding-004.
+        
+        CRITICAL: Must use same model as PDF upload for retrieval to work!
+        Returns 768-dimensional embedding vector.
+        """
+        try:
+            # Configure API key before embedding generation
+            from app.services.gemini_key_manager import gemini_key_manager
+            api_key = gemini_key_manager.get_available_key()
+            genai.configure(api_key=api_key)
+            
+            result = genai.embed_content(
+                model=self.embedding_model_name,
+                content=text,
+                task_type="retrieval_query"
+            )
+            return result['embedding']
+        except Exception as e:
+            logger.error(f"Embedding generation failed: {e}")
+            raise
+
+
     def _clean_markdown_formatting(self, text: str) -> str:
         """
         Clean markdown formatting to make text more readable for display.
@@ -164,7 +187,7 @@ class EnhancedRAGService:
         """
         try:
             # Get embedding using sentence-transformers (CRITICAL: Must match data upload model!)
-            query_embedding = self.embedding_model.encode(query_text).tolist()
+            query_embedding = self.generate_embedding(query_text)
             
             # Get classes to search
             classes_to_search = self.get_prerequisite_classes(subject, student_class, mode)
@@ -179,14 +202,14 @@ class EnhancedRAGService:
             
             for class_level in classes_to_search:
                 # Build metadata filter
-                # CRITICAL: Pinecone stores class as STRING, not integer!
+                # Pinecone stores class_level as INTEGER (from pdf_processor.py)
                 metadata_filter = {
-                    "class": {"$eq": str(class_level)},  # Convert to string for filter
+                    "class_level": {"$eq": class_level},  # Integer as stored in pdf_processor
                     "subject": subject
                 }
                 
                 if chapter is not None:
-                    metadata_filter["chapter"] = str(chapter)  # Also convert chapter to string
+                    metadata_filter["chapter_number"] = chapter  # Integer as stored in pdf_processor
                 
                 try:
                     # Query textbook index with namespace
@@ -266,7 +289,7 @@ class EnhancedRAGService:
                 return []
             
             # Generate embedding using sentence-transformers (CRITICAL: Must match data upload model!)
-            query_embedding = self.embedding_model.encode(query_text).tolist()
+            query_embedding = self.generate_embedding(query_text)
             
             # Query web content index
             # Note: Web content may use broader metadata structure
@@ -325,7 +348,7 @@ class EnhancedRAGService:
                 return []
             
             # Generate embedding using sentence-transformers
-            query_embedding = self.embedding_model.encode(query_text).tolist()
+            query_embedding = self.generate_embedding(query_text)
             
             # Query LLM content index
             results = self.llm_db.query(
@@ -992,3 +1015,4 @@ Keep it under 200 words and student-friendly."""
 
 # Global instance
 enhanced_rag_service = EnhancedRAGService()
+

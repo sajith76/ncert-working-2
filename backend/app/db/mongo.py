@@ -107,6 +107,16 @@ class SyncMongoDB:
         """Get notifications collection."""
         return self.db.notifications
     
+    @property
+    def books(self):
+        """Get books collection for book management."""
+        return self.db.books
+    
+    @property
+    def book_chapters(self):
+        """Get book chapters collection."""
+        return self.db.book_chapters
+    
     def get_collection(self, name: str):
         """Get a collection by name."""
         return self.db[name]

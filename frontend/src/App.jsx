@@ -18,6 +18,7 @@ import StudentManagement from "./pages/StudentManagement";
 import CreateTest from "./pages/CreateTest";
 import TestManagement from "./pages/TestManagement";
 import StudentTests from "./pages/StudentTests";
+import BookManagement from "./pages/BookManagementHierarchical";
 import "./App.css";
 
 // Protected Route wrapper - For authenticated users
@@ -34,7 +35,7 @@ function ProtectedRoute({ children }) {
   // Admin should only access admin routes
   if (user.role === "admin") {
     const path = window.location.pathname;
-    const adminRoutes = ["/admin-dashboard", "/student-management", "/support-tickets", "/staff-tests", "/create-test", "/test-management"];
+    const adminRoutes = ["/admin-dashboard", "/student-management", "/support-tickets", "/staff-tests", "/create-test", "/test-management", "/book-management"];
     const isAdminRoute = adminRoutes.some(route => path.startsWith(route));
     if (!isAdminRoute) {
       console.log("Admin trying to access non-admin route, redirecting to /admin-dashboard");
@@ -289,6 +290,14 @@ function App() {
           element={
             <StaffRoute>
               <TestManagement />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/book-management"
+          element={
+            <StaffRoute>
+              <BookManagement />
             </StaffRoute>
           }
         />

@@ -59,7 +59,7 @@ async def chat(request: ChatRequest):
 class StickFlowRequest(BaseModel):
     """Request schema for Stick Flow visual diagram generation."""
     highlight_text: str = Field(..., description="Text to create flow diagram for")
-    class_level: int = Field(..., ge=5, le=10, description="Class level (5-10)")
+    class_level: int = Field(..., ge=5, le=12, description="Class level (5-12)")
     subject: str = Field(..., description="Subject name")
     chapter: int = Field(..., ge=1, description="Chapter number")
 
@@ -150,7 +150,7 @@ Focus on the steps and connections."""
 class StudentChatRequest(BaseModel):
     """Request schema for student chatbot with Quick/DeepDive modes."""
     question: str = Field(..., description="Student's question")
-    class_level: int = Field(..., ge=5, le=10, description="Class level (5-10)")
+    class_level: int = Field(..., ge=5, le=12, description="Class level (5-12)")
     subject: str = Field(..., description="Subject name")
     chapter: int = Field(..., ge=1, description="Chapter number")
     mode: Literal["quick", "deepdive"] = Field("quick", description="Chat mode: quick (exam-style) or deepdive (comprehensive)")

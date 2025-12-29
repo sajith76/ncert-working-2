@@ -1,10 +1,11 @@
 /**
  * User Settings Panel
- * Allows users to set their class level and preferred subject
+ * Allows users to set their preferred subject
+ * Class level is fixed from user profile (students only study their own class)
  */
 
-import React from "react";
-import { Settings, User, BookOpen } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Settings, BookOpen, Loader2, CheckCircle } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -16,17 +17,12 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import useUserStore from "../stores/userStore";
 
-export default function UserSettingsPanel({ open, onClose }) {
-  const { user, setClassLevel, setPreferredSubject } = useUserStore();
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-  const classLevels = [5, 6, 7, 8, 9, 10];
-  const subjects = [
-    "Social Science",
-    "Science",
-    "Mathematics",
-    "English",
-    "Hindi",
-  ];
+export default function UserSettingsPanel({ open, onClose }) {
+  const { user, setPreferredSubject } = useUserStore();
+  const [availableSubjects, setAvailableSubjects] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const languageDescriptions = {
     5: "Very simple language (Like talking to a 10-year-old)",
@@ -35,6 +31,31 @@ export default function UserSettingsPanel({ open, onClose }) {
     8: "Standard language with technical terms explained (Like talking to a 13-year-old)",
     9: "Academic language with technical terms (Like talking to a 14-year-old)",
     10: "Full academic language (Board exam preparation level)",
+    11: "Advanced academic language (Higher secondary level)",
+    12: "Full academic language with exam focus (Board exam preparation)",
+  };
+
+  // Fetch available subjects for student's class level
+  useEffect(() => {
+    if (open) {
+      fetchAvailableSubjects();
+    }
+  }, [open, user.classLevel]);
+
+  const fetchAvailableSubjects = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE}/api/books/student/subjects?class_level=${user.classLevel}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableSubjects(data.subjects || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch subjects:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -51,58 +72,65 @@ export default function UserSettingsPanel({ open, onClose }) {
         </SheetHeader>
 
         <div className="space-y-6">
-          {/* Class Level Selection */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <p className="text-sm font-medium">Your Class Level</p>
+          {/* Class Level Display (Read-only) */}
+          <div className="p-4 rounded-lg bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-gray-700">Your Class</p>
+              <Badge className="bg-purple-600 text-white text-lg px-4 py-1">
+                Class {user.classLevel}
+              </Badge>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              {classLevels.map((level) => (
-                <Button
-                  key={level}
-                  variant={user.classLevel === level ? "default" : "outline"}
-                  className="h-auto py-3"
-                  onClick={() => setClassLevel(level)}
-                >
-                  <div className="text-center">
-                    <div className="text-lg font-bold">Class {level}</div>
-                  </div>
-                </Button>
-              ))}
-            </div>
-            
-            {/* Language Description */}
-            <div className="mt-3 p-3 rounded-lg bg-muted/30">
-              <p className="text-xs text-muted-foreground">
-                <strong>AI Language Level:</strong>
-              </p>
-              <p className="text-sm mt-1">
-                {languageDescriptions[user.classLevel]}
-              </p>
-            </div>
+            <p className="text-xs text-gray-500">
+              Class level is set from your profile. Contact admin to update.
+            </p>
           </div>
 
-          {/* Subject Selection */}
+          {/* AI Language Level Info */}
+          <div className="p-3 rounded-lg bg-muted/30">
+            <p className="text-xs text-muted-foreground">
+              <strong>AI Language Level:</strong>
+            </p>
+            <p className="text-sm mt-1">
+              {languageDescriptions[user.classLevel] || languageDescriptions[10]}
+            </p>
+          </div>
+
+          {/* Subject Selection - Real data from Pinecone */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <BookOpen className="h-4 w-4 text-muted-foreground" />
               <p className="text-sm font-medium">Preferred Subject</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {subjects.map((subject) => (
-                <Button
-                  key={subject}
-                  variant={
-                    user.preferredSubject === subject ? "default" : "outline"
-                  }
-                  size="sm"
-                  onClick={() => setPreferredSubject(subject)}
-                >
-                  {subject}
-                </Button>
-              ))}
-            </div>
+            
+            {loading ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Loading subjects...</span>
+              </div>
+            ) : availableSubjects.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {availableSubjects.map((subject) => (
+                  <Button
+                    key={subject.name}
+                    variant={user.preferredSubject === subject.name ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPreferredSubject(subject.name)}
+                    className="gap-1"
+                  >
+                    {subject.name}
+                    {subject.has_ai_support && (
+                      <CheckCircle className="h-3 w-3 text-green-500" />
+                    )}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4 text-sm text-muted-foreground">
+                No subjects available for Class {user.classLevel} yet.
+                <br />
+                Please contact your admin to upload books.
+              </div>
+            )}
           </div>
 
           {/* Current Settings Summary */}
@@ -124,7 +152,7 @@ export default function UserSettingsPanel({ open, onClose }) {
           <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
             <p className="text-xs text-blue-900 dark:text-blue-100">
               <strong>Tip:</strong> The AI will adjust its language complexity based on your class level. 
-              Class 5 gets very simple explanations, while Class 10 gets more detailed, academic language.
+              Only subjects with uploaded books for your class are shown here.
             </p>
           </div>
 

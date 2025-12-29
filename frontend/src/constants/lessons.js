@@ -242,7 +242,7 @@ export function getLessonsBySubject(subject) {
     case "Social Science":
       return SOCIAL_SCIENCE_LESSONS;
     default:
-      return MATH_LESSONS; // Default to Math since we have RAG support
+      return []; // Return empty array - no fallback to avoid showing wrong subject content
   }
 }
 

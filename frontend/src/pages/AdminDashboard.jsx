@@ -156,8 +156,8 @@ export default function AdminDashboard() {
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-4">
-            {[{ id: "overview", label: "Overview" }, { id: "students", label: "Students" }, { id: "tests", label: "Tests" }, { id: "support", label: "Support Tickets" }].map(tab => (
-              <button key={tab.id} onClick={() => { if (tab.id === "students") navigate("/student-management"); else if (tab.id === "tests") navigate("/test-management"); else if (tab.id === "support") navigate("/support-tickets"); else setActiveTab(tab.id); }}
+            {[{ id: "overview", label: "Overview" }, { id: "students", label: "Students" }, { id: "tests", label: "Tests" }, { id: "books", label: "Books" }, { id: "support", label: "Support Tickets" }].map(tab => (
+              <button key={tab.id} onClick={() => { if (tab.id === "students") navigate("/student-management"); else if (tab.id === "tests") navigate("/test-management"); else if (tab.id === "books") navigate("/book-management"); else if (tab.id === "support") navigate("/support-tickets"); else setActiveTab(tab.id); }}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition ${activeTab === tab.id ? "border-white text-white" : "border-transparent text-blue-100 hover:text-white"}`}>
                 {tab.label}
                 {tab.id === "support" && unreadCount > 0 && (

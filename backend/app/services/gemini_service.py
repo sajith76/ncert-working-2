@@ -67,6 +67,11 @@ class GeminiService:
             Embedding vector (list of floats)
         """
         try:
+            # Configure API key before embedding generation
+            from app.services.gemini_key_manager import gemini_key_manager
+            api_key = gemini_key_manager.get_available_key()
+            genai.configure(api_key=api_key)
+            
             result = genai.embed_content(
                 model=self.embedding_model,
                 content=text,

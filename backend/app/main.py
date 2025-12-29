@@ -105,6 +105,7 @@ app.include_router(annotation.router, prefix="/api")  # ✅ Annotation Chatbot
 # Import admin and user routers
 from app.routers import admin, user, test, auth
 from app.routers import admin_dashboard, support, support_tickets, test_management
+from app.routers import book_management
 app.include_router(admin.router, prefix="/api")  # ✅ Admin & Monitoring
 app.include_router(user.router, prefix="/api")   # ✅ User Stats (Dashboard)
 app.include_router(test.router, prefix="/api")   # ✅ Tests (Staff + AI)
@@ -113,6 +114,7 @@ app.include_router(admin_dashboard.router)       # ✅ Admin Dashboard & Student
 app.include_router(support.router)               # ✅ Support (FAQs, Contact, Feedback)
 app.include_router(support_tickets.router)       # ✅ Support Tickets
 app.include_router(test_management.router)       # ✅ Test Management (PDF Tests, Submissions, Feedback)
+app.include_router(book_management.router)       # ✅ Book Management (Admin upload, Student view)
 
 
 # Root endpoint
