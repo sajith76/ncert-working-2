@@ -1,7 +1,6 @@
 ﻿import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import useUserStore from "./stores/userStore";
 import LandingPage from "./pages/LandingPage";
-import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import TeacherPlaceholder from "./pages/TeacherPlaceholder";
@@ -109,12 +108,10 @@ function PublicRoute({ children }) {
       return <Navigate to="/admin-dashboard" replace />;
     }
 
-
     if (user.role === "teacher") {
       console.log("Teacher logged in, redirecting to /staff-tests");
       return <Navigate to="/staff-tests" replace />;
     }
-
 
     // Students
     if (user.isOnboarded) {
@@ -152,8 +149,6 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Landing Page - Always accessible */}
-        <Route path="/" element={<LandingPage />} />
         {/* Landing Page - Always accessible */}
         <Route path="/" element={<LandingPage />} />
         <Route
@@ -284,8 +279,7 @@ function App() {
           }
         />
 
-
-        {/* Admin Test Management Routes */}
+  {/* Admin Test Management Routes */ }
         <Route
           path="/create-test"
           element={
@@ -302,29 +296,21 @@ function App() {
             </StaffRoute>
           }
         />
-        <Route
-          path="/book-management"
-          element={
-            <StaffRoute>
-              <BookManagement />
-            </StaffRoute>
-          }
-        />
 
-        {/* Student Test Routes */}
-        <Route
-          path="/my-tests"
-          element={
-            <ProtectedRoute>
-              <StudentTests />
-            </ProtectedRoute>
-          }
-        />
+  {/* Student Test Routes */ }
+  <Route
+    path="/my-tests"
+    element={
+      <ProtectedRoute>
+        <StudentTests />
+      </ProtectedRoute>
+    }
+  />
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+  {/* Fallback */ }
+  <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes >
+    </BrowserRouter >
   );
 }
 
