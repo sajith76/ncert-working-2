@@ -279,7 +279,7 @@ function App() {
           }
         />
 
-  {/* Admin Test Management Routes */ }
+        {/* Admin Test Management Routes */}
         <Route
           path="/create-test"
           element={
@@ -297,18 +297,28 @@ function App() {
           }
         />
 
-  {/* Student Test Routes */ }
-  <Route
-    path="/my-tests"
-    element={
-      <ProtectedRoute>
-        <StudentTests />
-      </ProtectedRoute>
-    }
-  />
+        {/* Student Test Routes */}
+        <Route
+          path="/my-tests"
+          element={
+            <ProtectedRoute>
+              <StudentTests />
+            </ProtectedRoute>
+          }
+        />
 
-  {/* Fallback */ }
-  <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Student Test Routes */}
+        <Route
+          path="/my-tests"
+          element={
+            <ProtectedRoute>
+              <StudentTests />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes >
     </BrowserRouter >
   );
