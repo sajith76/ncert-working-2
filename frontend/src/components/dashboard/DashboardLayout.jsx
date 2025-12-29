@@ -12,7 +12,8 @@ import {
   Sparkles,
   HelpCircle,
   LayoutGrid,
-  GraduationCap
+  GraduationCap,
+  StickyNote
 } from "lucide-react";
 import useUserStore from "../../stores/userStore";
 import ChatbotPanel from "./ChatbotPanel";
@@ -45,6 +46,12 @@ const navItems = [
     icon: LayoutGrid,
     path: "/test",
     badge: "PRO"
+  },
+  {
+    id: "notes",
+    label: "Your Notes",
+    icon: StickyNote,
+    path: "/notes"
   },
   {
     id: "report-card",
@@ -124,10 +131,10 @@ export default function DashboardLayout({ children }) {
                 key={item.id}
                 onClick={() => handleNavClick(item)}
                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 ${item.highlight
-                    ? "bg-gray-100 border border-gray-200 text-gray-900"
-                    : active
-                      ? "bg-gray-100 text-gray-900"
-                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  ? "bg-gray-100 border border-gray-200 text-gray-900"
+                  : active
+                    ? "bg-gray-100 text-gray-900"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                   }`}
               >
                 <div className="flex items-center gap-3">
@@ -171,7 +178,7 @@ export default function DashboardLayout({ children }) {
                 <div className="flex items-center justify-between">
                   <span className="text-white font-semibold">1000 / mo</span>
                   <button className="px-4 py-1.5 rounded-sm bg-white text-gray-900 text-sm font-semibold hover:bg-gray-100 transition-colors">
-                     Live soon
+                    Live soon
                   </button>
                 </div>
               </div>

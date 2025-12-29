@@ -1,5 +1,6 @@
 ﻿import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import useUserStore from "./stores/userStore";
+import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import TeacherPlaceholder from "./pages/TeacherPlaceholder";
@@ -18,6 +19,7 @@ import StudentManagement from "./pages/StudentManagement";
 import CreateTest from "./pages/CreateTest";
 import TestManagement from "./pages/TestManagement";
 import StudentTests from "./pages/StudentTests";
+import Notes from "./pages/Notes";
 import BookManagement from "./pages/BookManagementHierarchical";
 import "./App.css";
 
@@ -105,12 +107,12 @@ function PublicRoute({ children }) {
       console.log("Admin logged in, redirecting to /admin-dashboard");
       return <Navigate to="/admin-dashboard" replace />;
     }
-    
+
     if (user.role === "teacher") {
       console.log("Teacher logged in, redirecting to /staff-tests");
       return <Navigate to="/staff-tests" replace />;
     }
-    
+
     // Students
     if (user.isOnboarded) {
       console.log("Student onboarded, redirecting to /dashboard");
@@ -147,15 +149,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Routes */}
-        <Route
-          path="/"
-          element={
-            <PublicRoute>
-              <Login />
-            </PublicRoute>
-          }
-        />
+        {/* Landing Page - Always accessible */}
+        <Route path="/" element={<LandingPage />} />
         <Route
           path="/login"
           element={
@@ -241,6 +236,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/notes"
+          element={
+            <ProtectedRoute>
+              <Notes />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Admin/Staff Routes */}
         <Route
@@ -275,7 +278,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        
+
         {/* Admin Test Management Routes */}
         <Route
           path="/create-test"
@@ -301,7 +304,7 @@ function App() {
             </StaffRoute>
           }
         />
-        
+
         {/* Student Test Routes */}
         <Route
           path="/my-tests"

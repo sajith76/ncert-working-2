@@ -1,6 +1,31 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import useUserStore from "../stores/userStore";
+import DashboardLayout from "../components/dashboard/DashboardLayout";
+import {
+  ArrowLeft,
+  Bell,
+  FileText,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Upload,
+  Eye,
+  MessageSquare,
+  MoreVertical,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
+  BookOpen,
+  Target,
+  TrendingUp,
+  Award,
+  Calendar,
+  User,
+  Flag,
+  X,
+  Loader2
+} from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -12,20 +37,27 @@ export default function StudentTests() {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState("available"); // available, submitted
-  
+  const [activeTab, setActiveTab] = useState("all"); // all, available, submitted, closed
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const testsPerPage = 6;
+
   // Upload state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  
+
   // View feedback modal
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
-  
+
   // Notifications
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // Detail view
+  const [viewingTest, setViewingTest] = useState(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -98,32 +130,28 @@ export default function StudentTests() {
 
   const handleSubmitTest = async () => {
     if (!uploadFile || !selectedTest) return;
-    
+
     setUploading(true);
     try {
       const formData = new FormData();
       formData.append("test_id", selectedTest.id);
       formData.append("student_id", user?.id || user?.user_id);
       formData.append("pdf_file", uploadFile);
-      
+
       const response = await fetch(`${API_URL}/api/tests/submit`, {
         method: "POST",
         body: formData
       });
-      
+
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.detail || "Failed to submit test");
       }
-      
-      const result = await response.json();
-      alert("Test submitted successfully!");
-      
+
       setShowUploadModal(false);
       setUploadFile(null);
       setSelectedTest(null);
-      
-      // Refresh data
+
       fetchTests();
       fetchSubmissions();
     } catch (err) {
@@ -143,62 +171,253 @@ export default function StudentTests() {
     setShowFeedbackModal(true);
   };
 
-  const getStatusBadge = (status) => {
-    const styles = {
-      active: "bg-green-100 text-green-700",
-      upcoming: "bg-blue-100 text-blue-700",
-      closed: "bg-gray-100 text-gray-700"
-    };
-    return <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || styles.closed}`}>{status}</span>;
+  // Filter tests based on active tab
+  const getFilteredTests = () => {
+    switch (activeTab) {
+      case "available":
+        return tests.filter(t => !t.has_submitted && t.status !== "closed");
+      case "submitted":
+        return tests.filter(t => t.has_submitted);
+      case "closed":
+        return tests.filter(t => t.status === "closed" && !t.has_submitted);
+      default:
+        return tests;
+    }
   };
 
-  const availableTests = tests.filter(t => !t.has_submitted && t.status !== "closed");
-  const submittedTests = tests.filter(t => t.has_submitted);
+  const filteredTests = getFilteredTests();
+  const totalPages = Math.ceil(filteredTests.length / testsPerPage);
+  const paginatedTests = filteredTests.slice(
+    (currentPage - 1) * testsPerPage,
+    currentPage * testsPerPage
+  );
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <button onClick={() => navigate("/dashboard")} className="text-white/80 hover:text-white">
-                ← Back
+  // Get test statistics
+  const getTestStats = (test) => {
+    const submission = submissions.find(s => s.test_id === test.id);
+    return {
+      status: test.has_submitted ? "Submitted" : test.status === "closed" ? "Closed" : "Available",
+      dueDate: test.end_datetime ? new Date(test.end_datetime).toLocaleDateString() : "No deadline",
+      hasFeedback: test.has_feedback || false,
+      score: submission?.score || null
+    };
+  };
+
+  // Detail View Component
+  const TestDetailView = ({ test }) => {
+    const submission = submissions.find(s => s.test_id === test.id);
+    const stats = getTestStats(test);
+
+    return (
+      <div className="space-y-6">
+        {/* Back Button */}
+        <button
+          onClick={() => setViewingTest(null)}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm font-medium">Back to Tests</span>
+        </button>
+
+        {/* Test Header */}
+        <div className="bg-white rounded-2xl p-8 border border-gray-100">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">{test.title}</h1>
+              <p className="text-gray-500">{test.description || "No description available"}</p>
+            </div>
+            <div className={`px-4 py-2 rounded-full text-sm font-medium ${test.has_submitted
+                ? "bg-green-100 text-green-700"
+                : test.status === "closed"
+                  ? "bg-gray-100 text-gray-600"
+                  : "bg-blue-100 text-blue-700"
+              }`}>
+              {stats.status}
+            </div>
+          </div>
+
+          {/* Big Stats Grid - Like Image 2 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+            <div>
+              <p className="text-4xl font-bold text-gray-900">{test.subject || "General"}</p>
+              <p className="text-sm text-gray-500 mt-1">Subject</p>
+            </div>
+            <div>
+              <p className="text-4xl font-bold text-gray-900">Class {test.class_level}</p>
+              <p className="text-sm text-gray-500 mt-1">Level</p>
+            </div>
+            <div>
+              <p className="text-4xl font-bold text-gray-900">{stats.dueDate}</p>
+              <p className="text-sm text-gray-500 mt-1">Due Date</p>
+            </div>
+            <div>
+              <p className="text-4xl font-bold text-gray-900">
+                {submission?.score ? `${submission.score}%` : "--"}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">Score</p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-3">
+            <a
+              href={`${API_URL}${test.pdf_url}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm font-medium"
+            >
+              <Eye className="w-4 h-4" />
+              View Questions
+            </a>
+
+            {!test.has_submitted && test.status !== "closed" && (
+              <button
+                onClick={() => openSubmitModal(test)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition text-sm font-medium"
+              >
+                <Upload className="w-4 h-4" />
+                Submit Answer
               </button>
-              <div>
-                <h1 className="text-2xl font-bold">My Tests</h1>
-                <p className="text-blue-100 text-sm">Class {user?.classLevel} • View and submit tests</p>
+            )}
+
+            {test.has_submitted && submission && (
+              <>
+                {submission.pdf_url && (
+                  <a
+                    href={`${API_URL}${submission.pdf_url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition text-sm font-medium"
+                  >
+                    <FileText className="w-4 h-4" />
+                    View Submission
+                  </a>
+                )}
+                {test.has_feedback && (
+                  <button
+                    onClick={() => viewFeedback(submission)}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition text-sm font-medium"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    View Feedback
+                  </button>
+                )}
+              </>
+            )}
+
+            <button
+              onClick={() => navigate("/support-tickets")}
+              className="flex items-center gap-2 px-5 py-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition text-sm font-medium ml-auto"
+            >
+              <Flag className="w-4 h-4" />
+              Report Issue
+            </button>
+          </div>
+        </div>
+
+        {/* Additional Stats Cards */}
+        {test.has_submitted && submission && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white rounded-2xl p-6 border border-gray-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Submission Details</h3>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Submitted On</span>
+                  <span className="font-medium text-gray-900">
+                    {submission.submitted_at ? new Date(submission.submitted_at).toLocaleString() : "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Status</span>
+                  <span className="font-medium text-green-600">Completed</span>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              {/* Notification Bell */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  className="p-2 bg-white/20 rounded-lg hover:bg-white/30 relative"
-                >
-                  🔔
-                  {notifications.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center">
-                      {notifications.length}
-                    </span>
-                  )}
-                </button>
-                
-                {showNotifications && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg z-50 max-h-96 overflow-y-auto">
-                    <div className="p-4 border-b">
-                      <h3 className="font-semibold text-gray-900">Notifications</h3>
-                    </div>
+
+            {test.has_feedback && (
+              <div className="bg-white rounded-2xl p-6 border border-gray-100">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                    <MessageSquare className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Teacher Feedback</h3>
+                </div>
+                <p className="text-gray-600 text-sm">
+                  {submission?.admin_comment || "Feedback available - click 'View Feedback' to see details."}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // If viewing a specific test, show detail view
+  if (viewingTest) {
+    return (
+      <DashboardLayout>
+        <TestDetailView test={viewingTest} />
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate("/student")}
+              className="p-2 hover:bg-gray-100 rounded-lg transition"
+            >
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {tests.length} {tests.length === 1 ? "Test" : "Tests"}
+              </h1>
+              <p className="text-sm text-gray-500">Class {user?.classLevel} • Manage your tests</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Notification Bell */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="p-2.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 relative transition"
+              >
+                <Bell className="w-5 h-5 text-gray-600" />
+                {notifications.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs text-white flex items-center justify-center">
+                    {notifications.length}
+                  </span>
+                )}
+              </button>
+
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg z-50 border border-gray-100 max-h-96 overflow-hidden">
+                  <div className="p-4 border-b border-gray-100">
+                    <h3 className="font-semibold text-gray-900">Notifications</h3>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
                     {notifications.length === 0 ? (
-                      <div className="p-4 text-center text-gray-500">
-                        No new notifications
+                      <div className="p-6 text-center">
+                        <Bell className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                        <p className="text-gray-500 text-sm">No new notifications</p>
                       </div>
                     ) : (
                       notifications.map(n => (
-                        <div key={n.id} className="p-4 border-b hover:bg-gray-50">
+                        <div key={n.id} className="p-4 border-b border-gray-50 hover:bg-gray-50">
                           <p className="font-medium text-gray-900 text-sm">{n.title}</p>
-                          <p className="text-gray-600 text-sm">{n.message}</p>
+                          <p className="text-gray-500 text-sm mt-1">{n.message}</p>
                           <div className="flex justify-between items-center mt-2">
                             <span className="text-xs text-gray-400">
                               {new Date(n.created_at).toLocaleString()}
@@ -214,179 +433,185 @@ export default function StudentTests() {
                       ))
                     )}
                   </div>
-                )}
-              </div>
-              
-              <span className="text-sm bg-white/20 px-3 py-1 rounded-full">{user?.name || user?.user_id}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
+        {/* Filter Tabs - Like Image 1 */}
+        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+          {[
+            { id: "all", label: "All Tests" },
+            { id: "available", label: "Available" },
+            { id: "submitted", label: "Submitted" },
+            { id: "closed", label: "Closed" }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => { setActiveTab(tab.id); setCurrentPage(1); }}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition ${activeTab === tab.id
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+                }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {error && (
-          <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded">
-            <p className="text-red-700">{error}</p>
+          <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <p className="text-red-700 text-sm">{error}</p>
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex gap-4 mb-6">
-          <button
-            onClick={() => setActiveTab("available")}
-            className={`px-6 py-3 rounded-lg font-medium transition ${
-              activeTab === "available"
-                ? "bg-blue-600 text-white"
-                : "bg-white text-gray-700 hover:bg-gray-100"
-            }`}
-          >
-            Available Tests ({availableTests.length})
-          </button>
-          <button
-            onClick={() => setActiveTab("submitted")}
-            className={`px-6 py-3 rounded-lg font-medium transition ${
-              activeTab === "submitted"
-                ? "bg-blue-600 text-white"
-                : "bg-white text-gray-700 hover:bg-gray-100"
-            }`}
-          >
-            Submitted ({submittedTests.length})
-          </button>
-        </div>
-
         {loading ? (
-          <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-500">Loading tests...</p>
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+          </div>
+        ) : filteredTests.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 text-center border border-gray-100">
+            <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No tests found</h3>
+            <p className="text-gray-500">Check back later for new tests from your teachers</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {activeTab === "available" && (
-              availableTests.length === 0 ? (
-                <div className="col-span-full bg-white p-8 rounded-xl text-center text-gray-500">
-                  <p className="text-4xl mb-4">📚</p>
-                  <p>No tests available right now</p>
-                  <p className="text-sm mt-2">Check back later for new tests from your teachers</p>
-                </div>
-              ) : (
-                availableTests.map(test => (
-                  <div key={test.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition">
-                    <div className="flex justify-between items-start mb-3">
-                      <h3 className="font-semibold text-gray-900">{test.title}</h3>
-                      {getStatusBadge(test.status)}
+          <>
+            {/* Tests List - Like Image 1 */}
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              {/* Table Header */}
+              <div className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-gray-100 bg-gray-50">
+                <div className="col-span-5 text-xs font-medium text-gray-500 uppercase tracking-wider">Test</div>
+                <div className="col-span-2 text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Subject</div>
+                <div className="col-span-2 text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Due Date</div>
+                <div className="col-span-2 text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Status</div>
+                <div className="col-span-1"></div>
+              </div>
+
+              {/* Test Rows */}
+              {paginatedTests.map(test => {
+                const stats = getTestStats(test);
+                const submission = submissions.find(s => s.test_id === test.id);
+
+                return (
+                  <div
+                    key={test.id}
+                    className="grid grid-cols-12 gap-4 px-6 py-5 border-b border-gray-50 hover:bg-gray-50 transition cursor-pointer"
+                    onClick={() => setViewingTest(test)}
+                  >
+                    {/* Test Info */}
+                    <div className="col-span-5 flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${test.has_submitted
+                          ? "bg-green-100"
+                          : test.status === "closed"
+                            ? "bg-gray-100"
+                            : "bg-blue-100"
+                        }`}>
+                        <FileText className={`w-5 h-5 ${test.has_submitted
+                            ? "text-green-600"
+                            : test.status === "closed"
+                              ? "text-gray-500"
+                              : "text-blue-600"
+                          }`} />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-gray-900">{test.title}</h3>
+                        <p className="text-sm text-gray-500">Class {test.class_level}</p>
+                      </div>
                     </div>
-                    
-                    <div className="text-sm text-gray-500 space-y-1 mb-4">
-                      <p>📘 {test.subject}</p>
-                      <p>🎓 Class {test.class_level}</p>
-                      {test.is_timed && test.end_datetime && (
-                        <p className="text-orange-600">
-                          ⏰ Due: {new Date(test.end_datetime).toLocaleString()}
-                        </p>
-                      )}
+
+                    {/* Subject */}
+                    <div className="col-span-2 flex items-center justify-center">
+                      <span className="text-sm text-gray-600">{test.subject || "General"}</span>
                     </div>
-                    
-                    {test.description && (
-                      <p className="text-sm text-gray-600 mb-4">{test.description}</p>
-                    )}
-                    
-                    <div className="flex gap-2">
-                      <a
-                        href={`${API_URL}${test.pdf_url}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg text-center hover:bg-blue-200 text-sm font-medium"
-                      >
-                        📄 View Questions
-                      </a>
+
+                    {/* Due Date */}
+                    <div className="col-span-2 flex items-center justify-center">
+                      <span className="text-sm text-gray-600">{stats.dueDate}</span>
+                    </div>
+
+                    {/* Status */}
+                    <div className="col-span-2 flex items-center justify-center">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${test.has_submitted
+                          ? "bg-green-100 text-green-700"
+                          : test.status === "closed"
+                            ? "bg-gray-100 text-gray-600"
+                            : "bg-blue-100 text-blue-700"
+                        }`}>
+                        {stats.status}
+                      </span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="col-span-1 flex items-center justify-end">
                       <button
-                        onClick={() => openSubmitModal(test)}
-                        className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+                        onClick={(e) => { e.stopPropagation(); }}
+                        className="p-1.5 hover:bg-gray-100 rounded-lg transition"
                       >
-                        📤 Submit Answer
+                        <MoreVertical className="w-4 h-4 text-gray-400" />
                       </button>
                     </div>
                   </div>
-                ))
-              )
-            )}
+                );
+              })}
+            </div>
 
-            {activeTab === "submitted" && (
-              submittedTests.length === 0 ? (
-                <div className="col-span-full bg-white p-8 rounded-xl text-center text-gray-500">
-                  <p className="text-4xl mb-4">✅</p>
-                  <p>No submitted tests yet</p>
-                  <p className="text-sm mt-2">Complete and submit tests to see them here</p>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-8 h-8 rounded-lg text-sm font-medium transition ${currentPage === page
+                          ? "bg-gray-900 text-white"
+                          : "text-gray-600 hover:bg-gray-100"
+                        }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                submittedTests.map(test => {
-                  const submission = submissions.find(s => s.test_id === test.id);
-                  return (
-                    <div key={test.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition">
-                      <div className="flex justify-between items-start mb-3">
-                        <h3 className="font-semibold text-gray-900">{test.title}</h3>
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                          ✅ Submitted
-                        </span>
-                      </div>
-                      
-                      <div className="text-sm text-gray-500 space-y-1 mb-4">
-                        <p>📘 {test.subject}</p>
-                        <p>🎓 Class {test.class_level}</p>
-                        {test.submission_date && (
-                          <p>📅 Submitted: {new Date(test.submission_date).toLocaleDateString()}</p>
-                        )}
-                      </div>
-                      
-                      <div className="flex gap-2">
-                        <a
-                          href={`${API_URL}${test.pdf_url}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg text-center hover:bg-blue-200 text-sm font-medium"
-                        >
-                          📄 View Test
-                        </a>
-                        {test.has_feedback && submission ? (
-                          <button
-                            onClick={() => viewFeedback(submission)}
-                            className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
-                          >
-                            💬 View Feedback
-                          </button>
-                        ) : (
-                          <span className="flex-1 px-4 py-2 bg-gray-100 text-gray-500 rounded-lg text-center text-sm">
-                            ⏳ Awaiting Feedback
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
             )}
-          </div>
+          </>
         )}
-      </main>
+      </div>
 
       {/* Upload Modal */}
       {showUploadModal && selectedTest && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
-            <h2 className="text-xl font-bold mb-4">Submit Test: {selectedTest.title}</h2>
-            
-            <div className="mb-4">
-              <a
-                href={`${API_URL}${selectedTest.pdf_url}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline text-sm"
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Submit Test</h2>
+              <button
+                onClick={() => { setShowUploadModal(false); setUploadFile(null); }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition"
               >
-                📄 View Test Questions
-              </a>
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
             </div>
-            
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition mb-4">
+
+            <p className="text-gray-600 mb-4">{selectedTest.title}</p>
+
+            <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-gray-400 transition mb-4">
               <input
                 type="file"
                 accept=".pdf"
@@ -397,37 +622,47 @@ export default function StudentTests() {
               <label htmlFor="submission-upload" className="cursor-pointer">
                 {uploadFile ? (
                   <div className="flex flex-col items-center">
-                    <span className="text-4xl mb-2">📄</span>
+                    <FileText className="w-10 h-10 text-green-500 mb-3" />
                     <p className="text-green-600 font-medium">{uploadFile.name}</p>
                     <p className="text-sm text-gray-500 mt-1">Click to change file</p>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center">
-                    <span className="text-4xl mb-2">📤</span>
+                    <Upload className="w-10 h-10 text-gray-400 mb-3" />
                     <p className="text-gray-600 font-medium">Upload your answer PDF</p>
                     <p className="text-sm text-gray-400 mt-1">Only PDF files are accepted</p>
                   </div>
                 )}
               </label>
             </div>
-            
-            <p className="text-sm text-gray-500 mb-4">
-              ⚠️ You can only submit once. Make sure your answers are complete before submitting.
-            </p>
-            
+
+            <div className="flex items-start gap-2 mb-6 p-3 bg-amber-50 rounded-lg">
+              <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-700">
+                You can only submit once. Make sure your answers are complete before submitting.
+              </p>
+            </div>
+
             <div className="flex gap-3">
               <button
                 onClick={() => { setShowUploadModal(false); setUploadFile(null); }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium text-gray-700 transition"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmitTest}
                 disabled={uploading || !uploadFile}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 font-medium transition flex items-center justify-center gap-2"
               >
-                {uploading ? "Submitting..." : "Submit Test"}
+                {uploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit Test"
+                )}
               </button>
             </div>
           </div>
@@ -436,30 +671,42 @@ export default function StudentTests() {
 
       {/* Feedback Modal */}
       {showFeedbackModal && selectedSubmission && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
-            <h2 className="text-xl font-bold mb-4">Test Feedback</h2>
-            
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Test Feedback</h2>
+              <button
+                onClick={() => { setShowFeedbackModal(false); setSelectedSubmission(null); }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
             <div className="mb-4">
               <p className="text-sm text-gray-500">Test: {selectedSubmission.test_title}</p>
               <p className="text-sm text-gray-500">
                 Submitted: {new Date(selectedSubmission.submitted_at).toLocaleString()}
               </p>
             </div>
-            
-            <div className="flex gap-2 mb-4">
+
+            {selectedSubmission.pdf_url && (
               <a
                 href={`${API_URL}${selectedSubmission.pdf_url}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:underline text-sm"
+                className="flex items-center gap-2 text-blue-600 hover:underline text-sm mb-4"
               >
-                📄 View Your Submission
+                <FileText className="w-4 h-4" />
+                View Your Submission
               </a>
-            </div>
-            
-            <div className="bg-purple-50 p-4 rounded-lg mb-4">
-              <h3 className="font-medium text-purple-900 mb-2">Teacher's Feedback:</h3>
+            )}
+
+            <div className="bg-purple-50 p-4 rounded-xl mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <MessageSquare className="w-4 h-4 text-purple-600" />
+                <h3 className="font-medium text-purple-900">Teacher's Feedback</h3>
+              </div>
               <p className="text-purple-800">{selectedSubmission.admin_comment || "No comment yet"}</p>
               {selectedSubmission.comment_at && (
                 <p className="text-xs text-purple-600 mt-2">
@@ -467,16 +714,16 @@ export default function StudentTests() {
                 </p>
               )}
             </div>
-            
+
             <button
               onClick={() => { setShowFeedbackModal(false); setSelectedSubmission(null); }}
-              className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+              className="w-full px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 font-medium transition"
             >
               Close
             </button>
           </div>
         </div>
       )}
-    </div>
+    </DashboardLayout>
   );
 }
