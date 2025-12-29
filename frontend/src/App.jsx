@@ -1,6 +1,7 @@
 ﻿import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import useUserStore from "./stores/userStore";
 import LandingPage from "./pages/LandingPage";
+import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import TeacherPlaceholder from "./pages/TeacherPlaceholder";
@@ -108,10 +109,12 @@ function PublicRoute({ children }) {
       return <Navigate to="/admin-dashboard" replace />;
     }
 
+
     if (user.role === "teacher") {
       console.log("Teacher logged in, redirecting to /staff-tests");
       return <Navigate to="/staff-tests" replace />;
     }
+
 
     // Students
     if (user.isOnboarded) {
@@ -149,6 +152,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Landing Page - Always accessible */}
+        <Route path="/" element={<LandingPage />} />
         {/* Landing Page - Always accessible */}
         <Route path="/" element={<LandingPage />} />
         <Route
@@ -278,6 +283,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+
 
         {/* Admin Test Management Routes */}
         <Route
