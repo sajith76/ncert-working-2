@@ -63,7 +63,7 @@ backend/*.db
 backend/*.sqlite3
 backend/uploaded_images/
 backend/logs/
-backend/models/
+
 
 # Frontend specific
 frontend/.eslintcache
