@@ -67,3 +67,10 @@ backend/logs/
 
 # Frontend specific
 frontend/.eslintcache
+
+# Backend artifacts
+backend/uploads/
+backend/extracted_images/
+*.log
+*.tmp
+backend/models/

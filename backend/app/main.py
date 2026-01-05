@@ -106,7 +106,9 @@ app.include_router(annotation.router, prefix="/api")  # ✅ Annotation Chatbot
 from app.routers import admin, user, test, auth
 from app.routers import admin_dashboard, support, support_tickets, test_management
 from app.routers import book_management
+from app.routers import admin_intel  # Intel OPEA-style admin endpoint
 app.include_router(admin.router, prefix="/api")  # ✅ Admin & Monitoring
+app.include_router(admin_intel.router)           # ✅ Intel Status Endpoint
 app.include_router(user.router, prefix="/api")   # ✅ User Stats (Dashboard)
 app.include_router(test.router, prefix="/api")   # ✅ Tests (Staff + AI)
 app.include_router(auth.router)                  # ✅ Authentication (Login/Password)
@@ -115,6 +117,13 @@ app.include_router(support.router)               # ✅ Support (FAQs, Contact, F
 app.include_router(support_tickets.router)       # ✅ Support Tickets
 app.include_router(test_management.router)       # ✅ Test Management (PDF Tests, Submissions, Feedback)
 app.include_router(book_management.router)       # ✅ Book Management (Admin upload, Student view)
+
+# Stretch goal routers (Intel Unnati)
+from app.routers import voice_chat, student_level, multilingual_chat, optimized_chat
+app.include_router(voice_chat.router)            # ✅ Voice Chat (Stretch Goal)
+app.include_router(student_level.router)         # ✅ Adaptive Explanations (Stretch Goal)
+app.include_router(multilingual_chat.router)     # ✅ Multilingual Chat (Indian Languages)
+app.include_router(optimized_chat.router, prefix="/api")  # ⚡ Optimized Chat (2-call max)
 
 
 # Root endpoint

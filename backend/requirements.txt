@@ -43,3 +43,7 @@ requests>=2.31.0
 transformers>=4.35.0
 optimum[openvino]>=1.14.0
 sentencepiece>=0.1.99
+
+# Multilingual Support & API Optimization
+langdetect>=1.0.9
+easyocr>=1.7.0

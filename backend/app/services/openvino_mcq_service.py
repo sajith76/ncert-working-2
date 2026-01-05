@@ -1,6 +1,8 @@
 """
 OpenVINO MCQ Service for NCERT AI Learning Platform
 
+Intel-optimized: Uses OpenVINO Runtime and optimum-intel for local MCQ generation on Intel CPU.
+
 Intel OpenVINO-accelerated MCQ generation using a local T5 model.
 Provides fast, on-device MCQ drafting with optional Gemini refinement.
 
@@ -8,6 +10,8 @@ This module provides:
 - Local text-to-MCQ generation using OpenVINO
 - Performance benchmarking vs cloud models
 - Fallback to Gemini when local model unavailable
+
+Maps to OPEA GenerationService MCQ component.
 """
 
 import os

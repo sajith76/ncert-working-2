@@ -1,6 +1,8 @@
 """
 OpenVINO OCR Service for NCERT AI Learning Platform
 
+Intel-optimized: Uses OpenVINO Runtime for text detection and recognition on Intel CPU/iGPU.
+
 Intel OpenVINO-based OCR service that replaces Tesseract for scanned PDF pages.
 Uses Intel's horizontal-text-detection-0001 and text-recognition-0014 models.
 
@@ -8,6 +10,8 @@ This module provides:
 - OpenVINO model loading and management
 - Text detection and recognition pipeline
 - Image preprocessing for optimal OCR results
+
+Maps to OPEA IngestionService OCR component.
 """
 
 import os
@@ -15,16 +19,24 @@ import logging
 from pathlib import Path
 from typing import List, Tuple, Optional
 import numpy as np
-import cv2
+
+try:
+    import cv2
+    HAS_CV2 = True
+except ImportError:
+    HAS_CV2 = False
 
 try:
     import openvino as ov
+    HAS_OPENVINO = True
 except ImportError:
-    raise ImportError(
-        "OpenVINO is required. Install with: pip install openvino>=2024.0.0"
-    )
+    HAS_OPENVINO = False
+    ov = None
 
 logger = logging.getLogger(__name__)
+
+if not HAS_OPENVINO:
+    logger.warning("⚠️ OpenVINO not installed. OCR service will be disabled. Install with: pip install openvino>=2024.0.0")
 
 
 # Character list for text-recognition-0014 model (alphanumeric + special)
@@ -50,7 +62,7 @@ class OpenVinoOCRService:
     
     def __init__(
         self,
-        device: str = "CPU",
+        device: str = "CPU", 
         model_dir: Optional[str] = None,
         detection_confidence: float = 0.5
     ):
@@ -64,9 +76,25 @@ class OpenVinoOCRService:
         """
         self.device = device
         self.detection_confidence = detection_confidence
+        self._is_available = False
+        
+        # Check OpenVINO availability
+        if not HAS_OPENVINO:
+            logger.warning("OpenVINO not available - OCR service disabled")
+            self.core = None
+            self._detection_model = None
+            self._recognition_model = None
+            return
+        
+        if not HAS_CV2:
+            logger.warning("OpenCV not available - OCR service disabled")
+            self.core = None
+            self._detection_model = None
+            self._recognition_model = None
+            return
         
         # Set up model directory
-        if model_dir is None:
+        if model_dir is None: 
             model_dir = os.path.join(
                 os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
                 "models", "openvino"
@@ -74,15 +102,26 @@ class OpenVinoOCRService:
         self.model_dir = Path(model_dir)
         self.model_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize OpenVINO Core
-        self.core = ov.Core()
-        
-        # Load models
-        self._detection_model = None
-        self._recognition_model = None
-        self._load_models()
-        
-        logger.info(f"✓ OpenVinoOCRService initialized (device: {device})")
+        try:
+            # Initialize OpenVINO Core
+            self.core = ov.Core()
+            
+            # Load models
+            self._detection_model = None
+            self._recognition_model = None
+            self._load_models()
+            self._is_available = True
+            
+            logger.info(f"✓ OpenVinoOCRService initialized (device: {device})")
+        except Exception as e:
+            logger.warning(f"Failed to initialize OpenVINO OCR: {e}")
+            self.core = None
+            self._detection_model = None
+            self._recognition_model = None
+    
+    def is_available(self) -> bool:
+        """Check if OCR service is available."""
+        return self._is_available and self._detection_model is not None
     
     def _download_model(self, url: str, model_name: str) -> Path:
         """Download model files if not already present."""

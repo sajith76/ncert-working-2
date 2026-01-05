@@ -1,5 +1,7 @@
 """
 Annotation Router - Text annotation with AI assistance (Define, Elaborate, Flow)
+
+Supports multilingual input/output - responds in the same language as the selected text.
 """
 
 from fastapi import APIRouter, HTTPException, Query
@@ -15,6 +17,35 @@ router = APIRouter(
     prefix="/annotation",
     tags=["Annotation"]
 )
+
+
+def detect_text_language(text: str) -> str:
+    """Detect language of the selected text and return language instruction."""
+    try:
+        from app.services.openvino_multilingual_service import multilingual_service
+        lang, confidence = multilingual_service.detect_language_with_confidence(text)
+        
+        lang_names = {
+            "hi": "Hindi",
+            "ur": "Urdu",
+            "ta": "Tamil",
+            "te": "Telugu",
+            "bn": "Bengali",
+            "mr": "Marathi",
+            "gu": "Gujarati",
+            "kn": "Kannada",
+            "ml": "Malayalam",
+            "pa": "Punjabi",
+            "ar": "Arabic",
+            "en": "English"
+        }
+        
+        if lang != "en" and confidence > 0.5:
+            lang_name = lang_names.get(lang, lang.upper())
+            return f"\n\n**IMPORTANT: The input text is in {lang_name}. You MUST respond entirely in {lang_name} using the same script.**"
+        return ""
+    except:
+        return ""
 
 
 class AnnotationRequest(BaseModel):
@@ -57,6 +88,11 @@ async def process_annotation(request: AnnotationRequest):
         logger.info(f"📝 Annotation request: {request.action.upper()} for '{request.selected_text[:50]}...'")
         logger.info(f"   Class {request.class_level}, {request.subject}")
         
+        # Detect input language for multilingual response
+        lang_instruction = detect_text_language(request.selected_text)
+        if lang_instruction:
+            logger.info(f"   🌐 Detected non-English input, will respond in same language")
+        
         # EDGE CASE: Check class availability
         # Currently we have comprehensive data for Classes 5-10
         # Classes 11-12 have limited content
@@ -97,7 +133,7 @@ async def process_annotation(request: AnnotationRequest):
 **Key Points:**
 • [Point 1]
 • [Point 2]  
-• [Point 3]"""
+• [Point 3]{lang_instruction}"""
                 
                 answer = gemini_service.generate_response(prompt)
             # Note: If no sources, answer_annotation_basic already provided fallback answer
@@ -138,7 +174,7 @@ async def process_annotation(request: AnnotationRequest):
 1. [Example 1]
 2. [Example 2]
 
-**Application:** [Why it matters]"""
+**Application:** [Why it matters]{lang_instruction}"""
                 
                 answer = gemini_service.generate_response(prompt)
             else:
@@ -188,7 +224,7 @@ async def process_annotation(request: AnnotationRequest):
 └───────┘   └───────┘
 ```
 
-Generate a similar flow diagram for "{request.selected_text}":"""
+Generate a similar flow diagram for "{request.selected_text}":{lang_instruction}"""
                 
                 answer = gemini_service.generate_response(prompt)
             else:

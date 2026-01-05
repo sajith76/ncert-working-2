@@ -1,6 +1,8 @@
 """
 OpenVINO Vision Service for NCERT AI Learning Platform
 
+Intel-optimized: Uses OpenVINO Runtime for image analysis on Intel CPU/iGPU.
+
 Intel OpenVINO-based image analysis service for educational content.
 Analyzes student-uploaded images (textbook pages, diagrams, handwritten questions)
 and extracts text/visual information for RAG processing.
@@ -9,6 +11,8 @@ This module provides:
 - Image type classification (textbook, diagram, handwritten, formula)
 - Text extraction via OpenVinoOCRService
 - Visual content description generation
+
+Maps to OPEA IngestionService image analysis component.
 """
 
 import logging

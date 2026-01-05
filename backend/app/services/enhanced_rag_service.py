@@ -461,6 +461,18 @@ class EnhancedRAGService:
         else:
             progressive_note = ""
         
+        # Detect language of question for multilingual response
+        lang_instruction = ""
+        try:
+            from app.services.openvino_multilingual_service import multilingual_service
+            lang, confidence = multilingual_service.detect_language_with_confidence(question)
+            lang_names = {"hi": "Hindi", "ur": "Urdu", "ta": "Tamil", "te": "Telugu", "bn": "Bengali", "mr": "Marathi", "gu": "Gujarati", "kn": "Kannada", "ml": "Malayalam", "pa": "Punjabi"}
+            if lang != "en" and confidence > 0.5 and lang in lang_names:
+                lang_instruction = f"\n6. IMPORTANT: The question is in {lang_names[lang]}. You MUST respond entirely in {lang_names[lang]} using the same script."
+                logger.info(f"   🌐 Detected {lang_names[lang]} input, will respond in same language")
+        except Exception as e:
+            logger.debug(f"Language detection skipped: {e}")
+        
         # Generate answer
         prompt = f"""You are a helpful tutor for Class {student_class} {subject} students.
 
@@ -478,7 +490,7 @@ INSTRUCTIONS:
    - Build up to current class level understanding
 3. Keep the answer clear and appropriate for Class {student_class} students
 4. Use examples from the textbook if available
-5. If the content from earlier classes helps explain basics, mention it naturally
+5. If the content from earlier classes helps explain basics, mention it naturally{lang_instruction}
 
 Generate a clear, helpful answer:"""
         
@@ -551,6 +563,18 @@ Generate a clear, helpful answer:"""
         # Build comprehensive prompt
         earliest_class = min(class_distribution.keys()) if class_distribution else student_class
         
+        # Detect language of question for multilingual response
+        lang_instruction = ""
+        try:
+            from app.services.openvino_multilingual_service import multilingual_service
+            lang, confidence = multilingual_service.detect_language_with_confidence(question)
+            lang_names = {"hi": "Hindi", "ur": "Urdu", "ta": "Tamil", "te": "Telugu", "bn": "Bengali", "mr": "Marathi", "gu": "Gujarati", "kn": "Kannada", "ml": "Malayalam", "pa": "Punjabi"}
+            if lang != "en" and confidence > 0.5 and lang in lang_names:
+                lang_instruction = f"\n7. IMPORTANT: The question is in {lang_names[lang]}. You MUST respond entirely in {lang_names[lang]} using the same script."
+                logger.info(f"   🌐 Detected {lang_names[lang]} input, will respond in same language")
+        except Exception as e:
+            logger.debug(f"Language detection skipped: {e}")
+        
         prompt = f"""You are an expert tutor providing a COMPREHENSIVE explanation for a Class {student_class} {subject} student in DEEP DIVE mode.
 
 STUDENT QUESTION: {question}
@@ -568,7 +592,7 @@ DEEP DIVE MODE INSTRUCTIONS:
    - 🔍 **Deep Dive** (comprehensive explanation with examples, applications, significance)
    - 💡 **Key Takeaways** (summarize main points)
 5. **Make it engaging**: Use analogies, examples, and clear explanations
-6. **Appropriate language**: Suitable for Class {student_class} students but comprehensive
+6. **Appropriate language**: Suitable for Class {student_class} students but comprehensive{lang_instruction}
 
 Generate a thorough, well-structured deep dive explanation:"""
         
