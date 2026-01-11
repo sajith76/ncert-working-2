@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import useUserStore from "../../stores/userStore";
-import { chatService, userStatsService } from "../../services/api";
+import { chatService, userStatsService, topQuestionsService } from "../../services/api";
 import { exportChatAsDoc } from "../../utils/chatExport";
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -26,92 +26,99 @@ export default function ChatbotPanel({ isOpen, onClose }) {
   const imageInputRef = useRef(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [activeSubject, setActiveSubject] = useState(user.preferredSubject || "Mathematics");
 
-  const subjects = [
-    "Mathematics", "Physics", "Chemistry", "Biology",
-    "Science", "History", "Geography", "English", "Hindi"
-  ];
+  // Dynamic subjects from database
+  const [subjects, setSubjects] = useState([]);
+  const [subjectsLoading, setSubjectsLoading] = useState(false);
+  const [activeSubject, setActiveSubject] = useState("");
 
   /**
    * TOP QUESTIONS STATE
-   * 
-   * This state holds the list of popular/trending questions fetched from the database.
-   * The questions are shown in the sidebar to help users quickly start conversations.
-   * 
-   * Data structure from API should be:
-   * {
-   *   id: number | string,    // Unique identifier
-   *   text: string,           // The question text to display
-   *   category: string,       // Subject category (Math, Science, etc.)
-   *   count?: number,         // Optional: Number of times asked (for sorting)
-   *   createdAt?: string      // Optional: Timestamp
-   * }
+   * Now fetched dynamically from the database based on selected subject and mode
    */
   const [topQuestions, setTopQuestions] = useState([]);
   const [topQuestionsLoading, setTopQuestionsLoading] = useState(false);
 
-  // Fallback questions shown while loading or if API fails
-  const fallbackQuestions = [
-    { id: 1, text: "Explain photosynthesis", category: "Science" },
-    { id: 2, text: "What are prime numbers?", category: "Math" },
-    { id: 3, text: "Causes of World War 1", category: "History" },
-    { id: 4, text: "Parts of a plant cell", category: "Biology" },
-    { id: 5, text: "Newton's laws of motion", category: "Physics" },
-  ];
+  /**
+   * FETCH AVAILABLE SUBJECTS FROM DATABASE
+   * Only shows subjects that have data for the student's class level
+   */
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      if (!isOpen) return;
+
+      setSubjectsLoading(true);
+      try {
+        const response = await topQuestionsService.getAvailableSubjects(user.classLevel || 7);
+        console.log("Subjects API response for class", user.classLevel, ":", response);
+
+        if (response.success && response.subjects && response.subjects.length > 0) {
+          setSubjects(response.subjects);
+          // Auto-select first subject or user's preferred subject
+          const preferredSubject = response.subjects.find(
+            s => s.value.toLowerCase() === (user.preferredSubject || "").toLowerCase()
+          );
+          setActiveSubject(preferredSubject ? preferredSubject.value : response.subjects[0].value);
+        } else {
+          // No subjects available for this class - show empty state
+          console.log("No subjects found for class", user.classLevel);
+          setSubjects([]);
+          setActiveSubject("");
+        }
+      } catch (error) {
+        console.error("Failed to fetch subjects:", error);
+        // On error, show empty state - don't use fallback
+        setSubjects([]);
+        setActiveSubject("");
+      } finally {
+        setSubjectsLoading(false);
+      }
+    };
+
+    fetchSubjects();
+  }, [isOpen, user.classLevel]);
 
   /**
    * FETCH TOP QUESTIONS FROM DATABASE
-   * 
-   * TODO: Backend Integration
-   * -------------------------
-   * 1. Create API endpoint: GET /api/questions/top
-   *    - Query params: limit (default 5), classLevel, subject (optional filters)
-   *    - Response: { questions: [...], total: number }
-   * 
-   * 2. Backend should track question popularity by:
-   *    - Counting how many times each question is asked
-   *    - Using a "top_questions" table or aggregating from chat history
-   *    - Sorting by count DESC, limiting to top 5-10
-   * 
-   * 3. Example API call:
-   *    const response = await fetch(`/api/questions/top?limit=5&classLevel=${user.classLevel}`);
-   *    const data = await response.json();
-   *    setTopQuestions(data.questions);
-   * 
-   * 4. Add to api.js service:
-   *    export const questionService = {
-   *      getTopQuestions: async (limit = 5, classLevel) => {
-   *        const response = await apiClient.get('/questions/top', { params: { limit, classLevel } });
-   *        return response.data;
-   *      }
-   *    };
+   * Updates when subject or mode changes
    */
   useEffect(() => {
     const fetchTopQuestions = async () => {
+      if (!isOpen || !activeSubject) return;
+
       setTopQuestionsLoading(true);
       try {
-        // TODO: Replace with actual API call
-        // const response = await questionService.getTopQuestions(5, user.classLevel);
-        // setTopQuestions(response.questions);
+        const mode = chatMode === "deepdive" ? "deep" : "quick";
+        const response = await topQuestionsService.getTopQuestions(
+          activeSubject,
+          user.classLevel || 7,
+          mode,
+          5
+        );
 
-        // For now, using fallback questions
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setTopQuestions(fallbackQuestions);
+        if (response.success && response.questions) {
+          // Transform API response to match UI format
+          const formattedQuestions = response.questions.map((q, index) => ({
+            id: index + 1,
+            text: q.question,
+            category: q.subject ? q.subject.charAt(0).toUpperCase() + q.subject.slice(1) : activeSubject,
+            askCount: q.ask_count || 0,
+            chapter: q.chapter
+          }));
+          setTopQuestions(formattedQuestions);
+        } else {
+          setTopQuestions([]);
+        }
       } catch (error) {
         console.error("Failed to fetch top questions:", error);
-        // Use fallback questions on error
-        setTopQuestions(fallbackQuestions);
+        setTopQuestions([]);
       } finally {
         setTopQuestionsLoading(false);
       }
     };
 
-    if (isOpen) {
-      fetchTopQuestions();
-    }
-  }, [isOpen, user.classLevel, activeSubject]);
+    fetchTopQuestions();
+  }, [isOpen, activeSubject, chatMode, user.classLevel]);
 
   const starterCards = [
     { id: 1, icon: FileText, title: "Explain a concept", description: "Get a clear explanation of any topic from your textbook", action: "Get Started" },
@@ -198,6 +205,19 @@ export default function ChatbotPanel({ isOpen, onClose }) {
         imageAnalysis: result.imageAnalysis
       }]);
       userStatsService.logActivity(user.id || "guest", 0.1);
+
+      // Track the question for top questions feature (non-blocking)
+      if (currentMessage.trim() && !currentImage) {
+        topQuestionsService.trackQuestion({
+          question: currentMessage,
+          answer: result.answer,
+          subject: activeSubject,
+          class_level: user.classLevel || 7,
+          mode: chatMode === "deepdive" ? "deep" : "quick",
+          user_id: user.id || "guest",
+          session_id: `${user.id || "guest"}_${Date.now()}`
+        }).catch(err => console.log("Question tracking failed:", err));
+      }
     } catch (error) {
       console.error("Chat error:", error);
       setMessages(prev => [...prev, {
@@ -279,15 +299,26 @@ export default function ChatbotPanel({ isOpen, onClose }) {
           {/* Subject Selector */}
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="text-xs font-medium text-gray-500 mb-2">Subject</p>
-            <select
-              value={activeSubject}
-              onChange={(e) => setActiveSubject(e.target.value)}
-              className="w-full p-2 rounded-lg bg-gray-50 border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900"
-            >
-              {subjects.map(sub => (
-                <option key={sub} value={sub}>{sub}</option>
-              ))}
-            </select>
+            {subjectsLoading ? (
+              <div className="w-full p-2 rounded-lg bg-gray-50 border border-gray-200 animate-pulse">
+                <div className="h-5 bg-gray-200 rounded w-3/4"></div>
+              </div>
+            ) : (
+              <select
+                value={activeSubject}
+                onChange={(e) => setActiveSubject(e.target.value)}
+                className="w-full p-2 rounded-lg bg-gray-50 border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                disabled={subjects.length === 0}
+              >
+                {subjects.length === 0 ? (
+                  <option value="">No subjects available</option>
+                ) : (
+                  subjects.map(sub => (
+                    <option key={sub.value} value={sub.value}>{sub.name}</option>
+                  ))
+                )}
+              </select>
+            )}
           </div>
 
           {/* Mode Toggle */}
@@ -309,7 +340,9 @@ export default function ChatbotPanel({ isOpen, onClose }) {
 
           {/* Top Questions */}
           <div className="flex-1 overflow-y-auto p-3">
-            <p className="text-xs font-medium text-gray-500 mb-3 px-1">Top Questions</p>
+            <p className="text-xs font-medium text-gray-500 mb-3 px-1">
+              Top Questions {activeSubject && `- ${activeSubject.charAt(0).toUpperCase() + activeSubject.slice(1)}`}
+            </p>
             <div className="space-y-2">
               {topQuestionsLoading ? (
                 // Loading skeleton
@@ -324,11 +357,19 @@ export default function ChatbotPanel({ isOpen, onClose }) {
                   <button key={q.id} onClick={() => setMessage(q.text)}
                     className="w-full text-left p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
                     <p className="text-sm text-gray-800 font-medium line-clamp-2">{q.text}</p>
-                    <p className="text-xs text-gray-400 mt-1">{q.category}</p>
+                    <div className="flex justify-between items-center mt-1">
+                      <p className="text-xs text-gray-400">{q.category}</p>
+                      {q.askCount > 0 && (
+                        <p className="text-xs text-gray-400">Asked {q.askCount}x</p>
+                      )}
+                    </div>
                   </button>
                 ))
               ) : (
-                <p className="text-sm text-gray-400 text-center py-4">No questions available</p>
+                <div className="text-center py-6">
+                  <p className="text-sm text-gray-400 mb-2">No questions asked yet</p>
+                  <p className="text-xs text-gray-300">Be the first to ask about {activeSubject || 'this subject'}!</p>
+                </div>
               )}
             </div>
           </div>

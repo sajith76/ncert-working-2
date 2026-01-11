@@ -166,6 +166,58 @@ class GeminiService:
             logger.error(f"❌ Gemini generation failed: {e}")
             raise
     
+    def generate_response_with_image(
+        self, 
+        prompt: str, 
+        image_bytes: bytes, 
+        mime_type: str = "image/png",
+        retry_count: int = 0
+    ) -> str:
+        """
+        Generate response from Gemini using both text and image input (Vision).
+        Perfect for extracting text from images in any language (Hindi, Tamil, etc.)
+        
+        Args:
+            prompt: Text prompt describing what to do with the image
+            image_bytes: Raw image bytes
+            mime_type: Image MIME type (default: image/png)
+            retry_count: Number of retries attempted (internal use)
+        
+        Returns:
+            Generated text response
+        """
+        try:
+            import base64
+            
+            # Get model with available API key
+            model, key_index = self._get_model_with_available_key(retry_count)
+            
+            # Create the image part for Gemini
+            image_part = {
+                "mime_type": mime_type,
+                "data": base64.b64encode(image_bytes).decode("utf-8")
+            }
+            
+            # Generate response with image
+            response = model.generate_content([prompt, image_part])
+            return response.text
+        
+        except Exception as e:
+            error_str = str(e)
+            
+            # Check if it's a 429 rate limit error
+            if "429" in error_str and retry_count < len(gemini_key_manager.keys):
+                logger.warning(f"⚠️  429 Rate limit hit. Rotating to next key (retry {retry_count + 1})...")
+                
+                # Force rotation to next key
+                gemini_key_manager.current_key_index = (gemini_key_manager.current_key_index + 1) % len(gemini_key_manager.keys)
+                
+                # Retry with next key
+                return self.generate_response_with_image(prompt, image_bytes, mime_type, retry_count + 1)
+            
+            logger.error(f"❌ Gemini vision failed: {e}")
+            raise
+    
     def _build_prompt(self, context: str, question: str, mode: str, class_level: int = 6) -> str:
         """Build prompt based on mode and class level to generate helpful answers."""
         

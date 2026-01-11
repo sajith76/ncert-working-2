@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Sparkles, FileText, BookOpen, Download } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Sparkles, FileText, BookOpen, Download, Image } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -18,6 +18,7 @@ import { exportChatAsDoc } from "../../utils/chatExport";
 /**
  * AI Panel Component - Backend Connected
  * Uses chatService.processAnnotation() for RAG-based AI responses
+ * Now supports image-based doubts from screenshot selection
  */
 
 const AI_ACTIONS = [
@@ -57,6 +58,40 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
   // Use lesson's subject if available, otherwise use user's preferred subject
   const effectiveSubject = currentLesson?.subject || user.preferredSubject || "Mathematics";
 
+  // Check if this is a screenshot-based doubt (has imageData)
+  const isScreenshotDoubt = selectedText?.imageData;
+  const preSelectedAction = selectedText?.action;
+
+  // Auto-trigger action if coming from Doubt screenshot with pre-selected action
+  useEffect(() => {
+    if (open && preSelectedAction && !selectedAction && !isProcessing) {
+      const actionMap = {
+        define: "define",
+        stickflow: "stick_flow",
+        elaborate: "elaborate",
+        custom: null, // Custom queries go through normal flow
+      };
+
+      const mappedAction = actionMap[preSelectedAction];
+      if (mappedAction) {
+        const action = AI_ACTIONS.find(a => a.id === mappedAction);
+        if (action) {
+          handleActionSelect(action);
+        }
+      }
+    }
+  }, [open, preSelectedAction]);
+
+  // Reset state when panel closes
+  useEffect(() => {
+    if (!open) {
+      setSelectedAction(null);
+      setResponse("");
+      setImageUrl(null);
+      setError(null);
+    }
+  }, [open]);
+
   const handleActionSelect = async (action) => {
     setSelectedAction(action.id);
     setIsProcessing(true);
@@ -69,16 +104,27 @@ export default function AIPanel({ open, onClose, currentLesson, pageNumber }) {
         text: selectedText?.text,
         action: action.id,
         subject: effectiveSubject,
-        classLevel: user.classLevel
+        classLevel: user.classLevel,
+        hasImageData: !!selectedText?.imageData,
       });
 
+      // Prepare the query - if we have image data, we'll send it for OCR
+      let queryText = selectedText?.text || "";
+
+      // If this is a screenshot doubt, add context
+      if (selectedText?.imageData) {
+        queryText = `[Screenshot from page ${selectedText.pageNumber || pageNumber}] Please ${action.id === 'define' ? 'define and explain' : action.id === 'stick_flow' ? 'create a step-by-step breakdown of' : 'elaborate on'} the content in this selected area from the textbook.`;
+      }
+
       // Use unified annotation endpoint for all actions
+      // The backend will use Pinecone to retrieve relevant content
       const result = await chatService.processAnnotation(
-        selectedText?.text || "",
+        queryText,
         action.id,
         user.classLevel,
         effectiveSubject,
-        currentLesson?.number || 1
+        currentLesson?.number || 1,
+        selectedText?.imageData // Pass image data if available
       );
 
       console.log("✅ Backend response received:", result);
@@ -158,15 +204,35 @@ Action: ${actionLabel}`,
         </SheetHeader>
 
         <div className="space-y-6">
-          {/* Selected Text */}
+          {/* Selected Content Preview */}
           <div className="rounded-lg border bg-muted/30 p-4">
             <p className="text-xs font-medium text-muted-foreground mb-2">
-              Selected Text
+              {isScreenshotDoubt ? "Selected Area" : "Selected Text"}
             </p>
-            <p className="text-sm leading-relaxed">{selectedText?.text}</p>
+
+            {/* Show screenshot preview if available */}
+            {isScreenshotDoubt && selectedText?.imageData && (
+              <div className="mb-3">
+                <img
+                  src={selectedText.imageData}
+                  alt="Selected area"
+                  className="max-h-32 rounded border object-contain"
+                />
+              </div>
+            )}
+
+            <p className="text-sm leading-relaxed">
+              {selectedText?.text || "No text selected"}
+            </p>
+
+            {selectedText?.pageNumber && (
+              <Badge variant="secondary" className="mt-2">
+                Page {selectedText.pageNumber}
+              </Badge>
+            )}
           </div>
 
-          {/* AI Actions */}
+          {/* AI Actions - Show only if no action selected yet */}
           {!selectedAction && (
             <div className="space-y-3">
               <p className="text-sm font-medium">What would you like to do?</p>
@@ -219,7 +285,14 @@ Action: ${actionLabel}`,
                     <div className="text-center space-y-2">
                       <Sparkles className="h-8 w-8 animate-pulse text-violet-600 mx-auto" />
                       <p className="text-sm text-muted-foreground">
-                        AI is {selectedAction === 'stick_flow' ? 'creating flow diagram' : 'thinking'}...
+                        {isScreenshotDoubt
+                          ? "Analyzing your selection..."
+                          : selectedAction === 'stick_flow'
+                            ? 'Creating flow diagram...'
+                            : 'AI is thinking...'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Retrieving from your textbook...
                       </p>
                     </div>
                   </div>

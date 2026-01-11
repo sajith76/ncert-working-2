@@ -297,7 +297,162 @@ async def get_topic_recommendations(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== ON-DEMAND QUESTION GENERATION ====================
+# ==================== FIXED-FORMAT CHAPTER TEST ====================
+
+class StartChapterTestRequest(BaseModel):
+    """Request for fixed-format chapter test (15Q, 20 marks, 40 min)."""
+    student_id: str = Field(..., description="Student ID")
+    class_level: int = Field(default=11, description="Class level")
+    subject: str = Field(..., description="Subject name")
+    chapter_number: int = Field(..., description="Chapter number")
+
+
+class ChapterTestQuestion(BaseModel):
+    """Question in chapter test with marks."""
+    question_number: int
+    question_id: str
+    question_text: str
+    difficulty: str
+    question_type: str
+    marks: int  # 1 or 2
+    time_estimate: int
+
+
+class ChapterTestResponse(BaseModel):
+    """Response for fixed-format chapter test."""
+    session_id: str
+    chapter_name: str
+    questions: List[ChapterTestQuestion]
+    total_questions: int  # Always 15
+    total_marks: int  # Always 20
+    time_limit_minutes: int  # Always 40
+    one_mark_count: int  # Always 10
+    two_mark_count: int  # Always 5
+    started_at: str
+    is_first_time: bool = False  # True if questions were just generated
+
+
+@router.post("/start-chapter", response_model=ChapterTestResponse)
+async def start_chapter_test(request: StartChapterTestRequest):
+    """
+    Start fixed-format chapter test.
+    
+    Test Format:
+    - 15 questions total (10 one-mark + 5 two-mark)
+    - 20 marks total
+    - 40 minutes time limit
+    
+    Flow:
+    1. Check if question pool exists in MongoDB
+    2. If not (first student), generate 30+15 questions and store
+    3. Random select 10+5 questions from pool
+    4. Create test session
+    """
+    try:
+        is_first_time = False
+        
+        # Step 1: Check if question pool exists
+        pool_status = await topic_question_bank_service.check_chapter_test_pool_exists(
+            class_level=request.class_level,
+            subject=request.subject,
+            chapter_number=request.chapter_number
+        )
+        
+        # Step 2: Generate if first time
+        if not pool_status.get("exists"):
+            logger.info(f"🎯 First student for {request.subject} Ch.{request.chapter_number} - Generating questions...")
+            is_first_time = True
+            
+            gen_result = await topic_question_bank_service.generate_chapter_test_pool(
+                class_level=request.class_level,
+                subject=request.subject,
+                chapter_number=request.chapter_number
+            )
+            
+            if gen_result.get("status") == "error":
+                raise HTTPException(
+                    status_code=500, 
+                    detail=f"Failed to generate questions: {gen_result.get('error')}"
+                )
+        
+        # Step 3: Select random questions from pool
+        selection = await topic_question_bank_service.select_chapter_test_questions(
+            class_level=request.class_level,
+            subject=request.subject,
+            chapter_number=request.chapter_number
+        )
+        
+        if selection.get("status") != "success":
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to select questions: {selection.get('error')}"
+            )
+        
+        questions = selection["questions"]
+        chapter_name = selection["chapter_name"]
+        
+        # Step 4: Create test session
+        session_id = str(uuid.uuid4())
+        
+        session_doc = {
+            "session_id": session_id,
+            "student_id": request.student_id,
+            "class_level": request.class_level,
+            "subject": request.subject,
+            "chapter_number": request.chapter_number,
+            "chapter_name": chapter_name,
+            "test_type": "chapter_test",
+            "num_questions": 15,
+            "total_marks": 20,
+            "one_mark_count": 10,
+            "two_mark_count": 5,
+            "time_limit_minutes": 40,
+            "questions_served": questions,  # Includes expected_answer for evaluation
+            "answers": [],
+            "status": "started",
+            "started_at": datetime.utcnow(),
+            "is_first_time": is_first_time
+        }
+        
+        await mongodb.db.test_sessions.insert_one(session_doc)
+        
+        # Build response (exclude expected_answer from questions sent to frontend)
+        response_questions = [
+            ChapterTestQuestion(
+                question_number=q["question_number"],
+                question_id=q["question_id"],
+                question_text=q["question_text"],
+                difficulty=q["difficulty"],
+                question_type=q["question_type"],
+                marks=q["marks"],
+                time_estimate=q["time_estimate"]
+            )
+            for q in questions
+        ]
+        
+        logger.info(f"✅ Started chapter test: {session_id} ({len(questions)} questions)")
+        
+        return ChapterTestResponse(
+            session_id=session_id,
+            chapter_name=chapter_name,
+            questions=response_questions,
+            total_questions=15,
+            total_marks=20,
+            time_limit_minutes=40,
+            one_mark_count=10,
+            two_mark_count=5,
+            started_at=session_doc["started_at"].isoformat(),
+            is_first_time=is_first_time
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error starting chapter test: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 
 class GenerateQuestionsRequest(BaseModel):
     """Request to generate questions for a chapter."""

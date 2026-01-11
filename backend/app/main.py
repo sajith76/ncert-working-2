@@ -125,6 +125,10 @@ app.include_router(student_level.router)         # ✅ Adaptive Explanations (St
 app.include_router(multilingual_chat.router)     # ✅ Multilingual Chat (Indian Languages)
 app.include_router(optimized_chat.router, prefix="/api")  # ⚡ Optimized Chat (2-call max)
 
+# Top Questions & Recommendations
+from app.routers import top_questions
+app.include_router(top_questions.router)         # ✅ Top Questions & Recommendations
+
 
 # Root endpoint
 @app.get("/", tags=["Health Check"])

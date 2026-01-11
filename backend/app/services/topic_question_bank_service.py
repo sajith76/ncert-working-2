@@ -348,11 +348,43 @@ Output ONLY the JSON array."""
     async def get_available_subjects(self, class_level: int) -> List[Dict]:
         """
         Get all subjects available for a class level.
-        Checks both MongoDB question bank AND Pinecone namespaces.
+        Checks MongoDB books collection, question bank, AND Pinecone namespaces.
         """
-        collection = mongodb.db[self.QUESTION_BANK]
+        logger.info(f"🔍 get_available_subjects called for class_level={class_level}")
+        subjects_map = {}  # Use dict to merge and count chapters
         
-        # First, check MongoDB question bank
+        # Method 1: Check books collection (Primary source - actual textbook content)
+        books_collection = mongodb.db["books"]
+        books_pipeline = [
+            {"$match": {"class_level": class_level}},
+            {"$group": {
+                "_id": "$subject",
+                "total_chapters": {"$sum": 1}
+            }},
+            {"$project": {
+                "subject": "$_id",
+                "total_chapters": 1,
+                "_id": 0
+            }}
+        ]
+        
+        logger.info(f"🔍 Querying books collection with class_level={class_level}")
+        books_results = await books_collection.aggregate(books_pipeline).to_list(100)
+        logger.info(f"📚 Books query result for class {class_level}: {books_results}")
+        for r in books_results:
+            subject = r.get("subject", "").title()
+            if subject:
+                subjects_map[subject] = {
+                    "subject": subject,
+                    "total_chapters": r.get("total_chapters", 0),
+                    "total_questions": 0
+                }
+        
+        if books_results:
+            logger.info(f"Found {len(books_results)} subjects in books for class {class_level}")
+        
+        # Method 2: Check question bank (has pre-generated questions)
+        collection = mongodb.db[self.QUESTION_BANK]
         pipeline = [
             {"$match": {"class_level": class_level, "is_active": True}},
             {"$group": {
@@ -368,15 +400,28 @@ Output ONLY the JSON array."""
             }}
         ]
         
-        results = await collection.aggregate(pipeline).to_list(100)
+        bank_results = await collection.aggregate(pipeline).to_list(100)
+        for r in bank_results:
+            subject = r.get("subject", "").title()
+            if subject:
+                if subject in subjects_map:
+                    # Update questions count
+                    subjects_map[subject]["total_questions"] = r.get("total_questions", 0)
+                else:
+                    subjects_map[subject] = {
+                        "subject": subject,
+                        "total_chapters": r.get("total_chapters", 0),
+                        "total_questions": r.get("total_questions", 0)
+                    }
         
-        # If we have results from question bank, return them
-        if results:
-            logger.info(f"Found {len(results)} subjects in question bank for class {class_level}")
+        # If we have subjects, return them
+        if subjects_map:
+            results = list(subjects_map.values())
+            logger.info(f"Found {len(results)} total subjects for class {class_level}")
             return results
         
         # Fallback: Check Pinecone namespace_db for embedded content
-        logger.info(f"No question bank found for class {class_level}, checking Pinecone namespaces...")
+        logger.info(f"No subjects found for class {class_level}, checking Pinecone namespaces...")
         
         try:
             from app.db.mongo import namespace_db
@@ -390,16 +435,31 @@ Output ONLY the JSON array."""
                 for ns_name, ns_stats in namespaces.items():
                     vector_count = ns_stats.get('vector_count', 0)
                     if vector_count > 0:
-                        # Map namespace back to proper subject name
-                        subject_name = ns_name.replace('-', ' ').title()
-                        subjects.append({
-                            "subject": subject_name,
-                            "total_chapters": max(1, vector_count // 50),  # Estimate chapters
-                            "total_questions": 0  # No pre-generated questions yet
-                        })
+                        # Parse namespace format: class_X_subject (e.g., class_10_science)
+                        parts = ns_name.split('_')
+                        
+                        # Check if namespace follows class_X_subject format
+                        if len(parts) >= 3 and parts[0] == 'class':
+                            try:
+                                ns_class = int(parts[1])
+                                # Only include subjects for the requested class level
+                                if ns_class == class_level:
+                                    subject_name = '_'.join(parts[2:]).replace('-', ' ').title()
+                                    # Check if already added
+                                    if not any(s['subject'].lower() == subject_name.lower() for s in subjects):
+                                        subjects.append({
+                                            "subject": subject_name,
+                                            "total_chapters": max(1, vector_count // 50),  # Estimate chapters
+                                            "total_questions": 0  # No pre-generated questions yet
+                                        })
+                            except ValueError:
+                                continue
+                        else:
+                            # Old format namespace - can't filter by class, skip it
+                            logger.debug(f"Skipping namespace {ns_name} - doesn't match class format")
                 
                 if subjects:
-                    logger.info(f"Found {len(subjects)} subjects in Pinecone namespaces")
+                    logger.info(f"Found {len(subjects)} subjects in Pinecone namespaces for class {class_level}")
                     return subjects
                 
         except Exception as e:
@@ -1410,7 +1470,324 @@ Output ONLY the JSON object."""
             "total_questions": 0,
             "message": "Questions not yet generated for this content"
         }
+    
+    # ==================== FIXED-FORMAT CHAPTER TEST METHODS ====================
+    
+    CHAPTER_TEST_COLLECTION = "chapter_test_questions"
+    
+    # Test format: 15 questions (10 one-mark + 5 two-mark) = 20 marks, 40 minutes
+    CHAPTER_TEST_FORMAT = {
+        "one_mark": {
+            "pool_size": 30,  # Generate 30 for variety (3 variations × 10)
+            "select_count": 10,
+            "marks": 1,
+            "difficulty_mix": ["easy", "medium", "application"]  # Mixed
+        },
+        "two_mark": {
+            "pool_size": 15,  # Generate 15 for variety (3 variations × 5)
+            "select_count": 5,
+            "marks": 2,
+            "difficulty_mix": ["medium", "application"]  # Mixed
+        },
+        "total_marks": 20,
+        "time_limit_minutes": 40
+    }
+    
+    async def check_chapter_test_pool_exists(
+        self,
+        class_level: int,
+        subject: str,
+        chapter_number: int
+    ) -> Dict:
+        """Check if chapter test question pool exists in MongoDB."""
+        collection = mongodb.db[self.CHAPTER_TEST_COLLECTION]
+        
+        existing = await collection.find_one({
+            "class_level": class_level,
+            "subject": subject,
+            "chapter_number": chapter_number
+        })
+        
+        if existing and len(existing.get("one_mark_pool", [])) >= 10 and len(existing.get("two_mark_pool", [])) >= 5:
+            return {
+                "exists": True,
+                "chapter_name": existing.get("chapter_name", ""),
+                "one_mark_count": len(existing.get("one_mark_pool", [])),
+                "two_mark_count": len(existing.get("two_mark_pool", [])),
+                "generated_at": existing.get("generated_at")
+            }
+        
+        return {"exists": False}
+    
+    async def generate_chapter_test_pool(
+        self,
+        class_level: int,
+        subject: str,
+        chapter_number: int
+    ) -> Dict:
+        """
+        Generate chapter test question pool (first-time).
+        Creates 30 one-mark + 15 two-mark = 45 questions total.
+        
+        One-mark questions: Mix of easy, medium, application (1 mark each)
+        Two-mark questions: Mix of medium, application (2 marks each)
+        
+        Returns: Dict with status and question counts
+        """
+        logger.info(f"🎯 Generating chapter test pool for {subject} Ch.{chapter_number}...")
+        
+        collection = mongodb.db[self.CHAPTER_TEST_COLLECTION]
+        
+        # Step 1: Get chapter content from Pinecone
+        content = await self._retrieve_chapter_content(class_level, subject, chapter_number)
+        
+        if not content:
+            logger.error(f"No content found for {subject} Ch.{chapter_number}")
+            return {"status": "error", "error": "No chapter content available"}
+        
+        chapter_name = content.get("chapter_name", f"Chapter {chapter_number}")
+        content_text = content.get("text", "")
+        
+        # Step 2: Generate one-mark questions (30 total)
+        one_mark_questions = await self._generate_chapter_test_questions_batch(
+            content_text=content_text,
+            class_level=class_level,
+            subject=subject,
+            chapter_name=chapter_name,
+            marks=1,
+            count=self.CHAPTER_TEST_FORMAT["one_mark"]["pool_size"],
+            difficulty_mix=self.CHAPTER_TEST_FORMAT["one_mark"]["difficulty_mix"]
+        )
+        
+        # Step 3: Generate two-mark questions (15 total)
+        two_mark_questions = await self._generate_chapter_test_questions_batch(
+            content_text=content_text,
+            class_level=class_level,
+            subject=subject,
+            chapter_name=chapter_name,
+            marks=2,
+            count=self.CHAPTER_TEST_FORMAT["two_mark"]["pool_size"],
+            difficulty_mix=self.CHAPTER_TEST_FORMAT["two_mark"]["difficulty_mix"]
+        )
+        
+        # Step 4: Validate questions have proper answers
+        valid_one_mark = [q for q in one_mark_questions if self._has_valid_answer(q)]
+        valid_two_mark = [q for q in two_mark_questions if self._has_valid_answer(q)]
+        
+        logger.info(f"Validated: {len(valid_one_mark)} one-mark, {len(valid_two_mark)} two-mark questions")
+        
+        # If not enough questions, log warning but proceed
+        if len(valid_one_mark) < 10 or len(valid_two_mark) < 5:
+            logger.warning(f"Insufficient validated questions: {len(valid_one_mark)} one-mark, {len(valid_two_mark)} two-mark")
+        
+        # Step 5: Store in MongoDB
+        pool_doc = {
+            "class_level": class_level,
+            "subject": subject,
+            "chapter_number": chapter_number,
+            "chapter_name": chapter_name,
+            "one_mark_pool": valid_one_mark,
+            "two_mark_pool": valid_two_mark,
+            "total_one_mark": len(valid_one_mark),
+            "total_two_mark": len(valid_two_mark),
+            "generated_at": datetime.utcnow(),
+            "last_used": datetime.utcnow()
+        }
+        
+        # Upsert - update if exists, insert if not
+        await collection.update_one(
+            {
+                "class_level": class_level,
+                "subject": subject,
+                "chapter_number": chapter_number
+            },
+            {"$set": pool_doc},
+            upsert=True
+        )
+        
+        logger.info(f"✅ Stored chapter test pool: {len(valid_one_mark)} one-mark + {len(valid_two_mark)} two-mark questions")
+        
+        return {
+            "status": "generated",
+            "chapter_name": chapter_name,
+            "one_mark_count": len(valid_one_mark),
+            "two_mark_count": len(valid_two_mark),
+            "total_questions": len(valid_one_mark) + len(valid_two_mark)
+        }
+    
+    async def _generate_chapter_test_questions_batch(
+        self,
+        content_text: str,
+        class_level: int,
+        subject: str,
+        chapter_name: str,
+        marks: int,
+        count: int,
+        difficulty_mix: List[str]
+    ) -> List[Dict]:
+        """Generate questions for chapter test with specified marks value."""
+        
+        mark_type = "one-mark" if marks == 1 else "two-mark"
+        difficulty_desc = ", ".join(difficulty_mix)
+        
+        prompt = f"""Generate {count} {mark_type} questions for Class {class_level} {subject} chapter test.
+
+**Chapter:** {chapter_name}
+
+**Textbook Content:**
+{content_text[:15000]}
+
+**REQUIREMENTS:**
+- Generate exactly {count} questions worth {marks} mark(s) each
+- Mix of difficulties: {difficulty_desc}
+- {"Simple recall, definitions, basic concepts" if marks == 1 else "Application, understanding, problem-solving"}
+- Each question MUST have a clear, complete expected answer
+- For numerical questions: include solution steps
+
+**OUTPUT FORMAT (JSON Array):**
+[
+  {{
+    "question_text": "What is the definition of...",
+    "question_type": "{"recall" if marks == 1 else "application"}",
+    "difficulty": "{"easy" if marks == 1 else "medium"}",
+    "expected_answer": "Complete answer that can be verified...",
+    "keywords": ["keyword1", "keyword2"],
+    "marks": {marks},
+    "is_numerical": false,
+    "solution_steps": ""
+  }},
+  ...
+]
+
+**CRITICAL RULES:**
+1. Every question MUST have expected_answer (at least 10 characters)
+2. Questions must be diverse - cover different concepts from the chapter
+3. For {marks}-mark questions: {"brief, direct answers" if marks == 1 else "more detailed answers with explanation"}
+4. Questions MUST be answerable from the provided content
+5. For numerical problems, include solution_steps
+
+Output ONLY the JSON array, no other text."""
+
+        try:
+            response = self.gemini.generate_response(prompt)
+            
+            json_match = re.search(r'\[.*\]', response, re.DOTALL)
+            if json_match:
+                questions_data = json.loads(json_match.group())
+                
+                formatted_questions = []
+                for i, q in enumerate(questions_data):
+                    question = {
+                        "question_id": f"{subject.lower().replace(' ', '_')}_{chapter_name.lower()[:10]}_{mark_type}_{i}_{datetime.utcnow().timestamp()}",
+                        "question_text": q.get("question_text", ""),
+                        "question_type": q.get("question_type", "recall" if marks == 1 else "application"),
+                        "difficulty": q.get("difficulty", "medium"),
+                        "expected_answer": q.get("expected_answer", ""),
+                        "keywords": q.get("keywords", []),
+                        "marks": marks,
+                        "is_numerical": q.get("is_numerical", False),
+                        "solution_steps": q.get("solution_steps", "")
+                    }
+                    formatted_questions.append(question)
+                
+                logger.info(f"Generated {len(formatted_questions)} {mark_type} questions")
+                return formatted_questions
+            
+            logger.error("Failed to parse questions JSON")
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error generating {mark_type} questions: {e}")
+            return []
+    
+    def _has_valid_answer(self, question: Dict) -> bool:
+        """Check if question has a valid expected answer."""
+        answer = question.get("expected_answer", "")
+        if not answer:
+            return False
+        # Answer should be at least 10 characters for meaningful content
+        return len(str(answer).strip()) >= 10
+    
+    async def select_chapter_test_questions(
+        self,
+        class_level: int,
+        subject: str,
+        chapter_number: int
+    ) -> Dict:
+        """
+        Select 15 random questions from pool for a chapter test.
+        - 10 one-mark questions (mixed difficulty)
+        - 5 two-mark questions (mixed difficulty)
+        - Total: 20 marks, 40 minutes
+        
+        Returns: Dict with questions, chapter info, and test parameters
+        """
+        collection = mongodb.db[self.CHAPTER_TEST_COLLECTION]
+        
+        pool = await collection.find_one({
+            "class_level": class_level,
+            "subject": subject,
+            "chapter_number": chapter_number
+        })
+        
+        if not pool:
+            return {"status": "error", "error": "Question pool not found"}
+        
+        one_mark_pool = pool.get("one_mark_pool", [])
+        two_mark_pool = pool.get("two_mark_pool", [])
+        
+        if len(one_mark_pool) < 10 or len(two_mark_pool) < 5:
+            return {"status": "error", "error": "Insufficient questions in pool"}
+        
+        import random
+        
+        # Random select 10 one-mark questions
+        selected_one_mark = random.sample(one_mark_pool, 10)
+        
+        # Random select 5 two-mark questions
+        selected_two_mark = random.sample(two_mark_pool, 5)
+        
+        # Combine and shuffle
+        all_questions = selected_one_mark + selected_two_mark
+        random.shuffle(all_questions)
+        
+        # Add question numbers
+        formatted_questions = []
+        for i, q in enumerate(all_questions):
+            formatted_questions.append({
+                "question_number": i + 1,
+                "question_id": q.get("question_id", f"q_{i}"),
+                "question_text": q.get("question_text", ""),
+                "difficulty": q.get("difficulty", "medium"),
+                "question_type": q.get("question_type", "conceptual"),
+                "marks": q.get("marks", 1),
+                "time_estimate": 120 if q.get("marks", 1) == 2 else 90,  # 2 min for 2-mark, 1.5 min for 1-mark
+                # Keep for evaluation (not sent to frontend)
+                "expected_answer": q.get("expected_answer", ""),
+                "keywords": q.get("keywords", []),
+                "solution_steps": q.get("solution_steps", "")
+            })
+        
+        # Update last_used timestamp
+        await collection.update_one(
+            {"_id": pool["_id"]},
+            {"$set": {"last_used": datetime.utcnow()}}
+        )
+        
+        logger.info(f"✅ Selected 15 questions for {subject} Ch.{chapter_number} test")
+        
+        return {
+            "status": "success",
+            "chapter_name": pool.get("chapter_name", f"Chapter {chapter_number}"),
+            "questions": formatted_questions,
+            "total_questions": 15,
+            "total_marks": 20,
+            "time_limit_minutes": 40,
+            "one_mark_count": 10,
+            "two_mark_count": 5
+        }
 
 
 # Global instance
 topic_question_bank_service = TopicQuestionBankService()
+

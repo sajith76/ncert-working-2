@@ -15,27 +15,36 @@ export const chatService = {
   /**
    * Process annotation with AI (Define, Elaborate, Stick Flow)
    * UNIFIED ENDPOINT - Main function for text annotations
+   * Supports both text and image-based (screenshot) annotations
    * @param {string} text - The selected text to process
    * @param {string} action - Action type: "define", "elaborate", or "stick_flow"
    * @param {number} classLevel - User's class level (5-10)
    * @param {string} subject - Subject name
    * @param {number} chapter - Chapter number
+   * @param {string} imageData - Optional base64 image data for screenshot doubts
    * @returns {Promise<{answer: string, action_type: string, source_count: number}>}
    */
-  async processAnnotation(text, action, classLevel, subject, chapter) {
+  async processAnnotation(text, action, classLevel, subject, chapter, imageData = null) {
     try {
+      const requestBody = {
+        selected_text: text,
+        action: action,
+        class_level: classLevel,
+        subject: subject,
+        chapter: chapter,
+      };
+
+      // Add image data if provided (for screenshot-based doubts)
+      if (imageData) {
+        requestBody.image_data = imageData;
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/annotation/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          selected_text: text,
-          action: action,
-          class_level: classLevel,
-          subject: subject,
-          chapter: chapter,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -534,6 +543,41 @@ export const testService = {
   },
 
   /**
+   * Start fixed-format chapter test (15 questions, 20 marks, 40 minutes)
+   * @param {object} params - Test parameters
+   * @param {string} params.studentId - Student ID
+   * @param {number} params.classLevel - Class level (default 11)
+   * @param {string} params.subject - Subject name
+   * @param {number} params.chapterNumber - Chapter number
+   * @returns {Promise<{session_id, questions, total_marks, time_limit_minutes}>}
+   */
+  async startChapterTest(params) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/test/start-chapter`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_id: params.studentId,
+          class_level: params.classLevel || 11,
+          subject: params.subject,
+          chapter_number: params.chapterNumber,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Start Chapter Test Error: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Start Chapter Test Error:", error);
+      throw error;
+    }
+  },
+
+
+  /**
    * Submit a single answer during test
    * @param {string} sessionId - Session ID
    * @param {string} questionId - Question ID
@@ -930,11 +974,143 @@ export const healthCheck = async () => {
   }
 };
 
+/**
+ * Top Questions Service - Dynamic subjects and top questions from database
+ */
+export const topQuestionsService = {
+  /**
+   * Get available subjects for a class level
+   * Only returns subjects that have data in the database
+   * @param {number} classLevel - Class level (6-12)
+   * @returns {Promise<{success: boolean, subjects: Array, count: number}>}
+   */
+  async getAvailableSubjects(classLevel) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/top-questions/subjects/${classLevel}`);
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Get Available Subjects Error:", error);
+      // Return empty - no fallback to prevent showing incorrect subjects
+      return {
+        success: false,
+        subjects: [],
+        count: 0
+      };
+    }
+  },
+
+  /**
+   * Get top questions for a subject
+   * @param {string} subject - Subject name
+   * @param {number} classLevel - Class level
+   * @param {string} mode - "quick" or "deep"
+   * @param {number} limit - Number of questions to return
+   * @returns {Promise<{success: boolean, questions: Array, count: number}>}
+   */
+  async getTopQuestions(subject, classLevel, mode = "quick", limit = 5) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/top-questions/top`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subject: subject,
+          class_level: classLevel,
+          mode: mode,
+          limit: limit
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Get Top Questions Error:", error);
+      return {
+        success: false,
+        questions: [],
+        count: 0
+      };
+    }
+  },
+
+  /**
+   * Track a question-answer pair
+   * @param {Object} data - Question data
+   * @returns {Promise<{success: boolean, question_id: string}>}
+   */
+  async trackQuestion(data) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/top-questions/track`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Track Question Error:", error);
+      return { success: false };
+    }
+  },
+
+  /**
+   * Get personalized recommendations for a user
+   * @param {string} userId - User ID
+   * @param {string} subject - Subject name
+   * @param {number} classLevel - Class level
+   * @param {string} mode - "quick" or "deep"
+   * @param {number} limit - Number of recommendations
+   * @returns {Promise<{success: boolean, recommendations: Array}>}
+   */
+  async getRecommendations(userId, subject, classLevel, mode = "quick", limit = 5) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/top-questions/recommendations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          subject: subject,
+          class_level: classLevel,
+          mode: mode,
+          limit: limit
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Get Recommendations Error:", error);
+      return { success: false, recommendations: [] };
+    }
+  }
+};
+
 export default {
   chatService,
   assessmentService,
   userStatsService,
   notesService,
   testService,
+  topQuestionsService,
   healthCheck,
 };

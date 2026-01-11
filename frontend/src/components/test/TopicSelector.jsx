@@ -28,8 +28,10 @@ export default function TopicSelector({
   onSelectTopic,
   onCancel
 }) {
-  const [step, setStep] = useState(1); // 1=Subject, 2=Chapter, 3=Config
+  const [step, setStep] = useState(1); // 1=Subject, 2=Chapter
   const [loading, setLoading] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // Selection state
   const [subjects, setSubjects] = useState([]);
@@ -39,10 +41,8 @@ export default function TopicSelector({
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [selectedChapter, setSelectedChapter] = useState(null);
 
-  // Test config
-  const [numQuestions, setNumQuestions] = useState(10);
-  const [totalMarks, setTotalMarks] = useState(25);
-  const [difficulty, setDifficulty] = useState("mixed");
+  // Fixed test format - no user config needed
+  // 15 questions (10 one-mark + 5 two-mark) = 20 marks, 40 minutes
 
   // Load subjects on mount
   useEffect(() => {
@@ -52,20 +52,21 @@ export default function TopicSelector({
   const fetchSubjects = async () => {
     setLoading(true);
     try {
+      console.log("Fetching subjects for class:", classLevel);
       const data = await testService.getAvailableSubjects(classLevel);
+      console.log("Subjects API response:", data);
+
       if (Array.isArray(data) && data.length > 0) {
         setSubjects(data);
       } else {
-        // Fallback subjects
-        setSubjects([
-          { subject: "Mathematics", total_chapters: 16, total_questions: 240 },
-        ]);
+        // No subjects available - show empty state (no fallback)
+        console.log("No subjects found for class", classLevel);
+        setSubjects([]);
       }
     } catch (error) {
       console.error("Failed to fetch subjects:", error);
-      setSubjects([
-        { subject: "Mathematics", total_chapters: 16, total_questions: 240 },
-      ]);
+      // On error, show empty - no fallback
+      setSubjects([]);
     } finally {
       setLoading(false);
     }
@@ -97,52 +98,40 @@ export default function TopicSelector({
 
   const handleSelectChapter = (chapter) => {
     setSelectedChapter(chapter);
-    // Move to configuration step instead of starting immediately
-    setStep(3);
+    // Show confirmation modal
+    setShowConfirm(true);
   };
 
   const handleStartTest = () => {
+    // Fixed format: 15Q (10×1 + 5×2) = 20 marks, 40 min
     onSelectTopic({
       subject: selectedSubject.subject,
       chapter_number: selectedChapter.chapter_number,
       chapter_name: selectedChapter.chapter_name,
-      topic_id: "all",
-      topic_name: "Entire Chapter",
-      num_questions: numQuestions,
-      total_marks: totalMarks,
-      difficulty: difficulty
+      num_questions: 15,
+      total_marks: 20,
+      time_limit_minutes: 40,
+      use_chapter_test: true  // Flag for new endpoint
     });
   };
 
   const handleRecommendationClick = (rec) => {
-    // Skip topic selection and start test for recommended topic
-    onSelectTopic({
-      subject: selectedSubject?.subject || rec.subject || "Mathematics",
+    // For recommendations, also use fixed format
+    setSelectedSubject({ subject: rec.subject || selectedSubject?.subject });
+    setSelectedChapter({
       chapter_number: rec.chapter,
-      chapter_name: rec.chapter_name,
-      topic_id: rec.topic_id,
-      topic_name: rec.topic_name,
-      num_questions: numQuestions,
-      total_marks: totalMarks,
-      difficulty: difficulty
+      chapter_name: rec.chapter_name
     });
+    setShowConfirm(true);
   };
 
   const goBack = () => {
-    if (step === 3) {
-      setStep(2);
-      setSelectedChapter(null);
-    } else if (step === 2) {
+    if (step === 2) {
       setStep(1);
       setSelectedChapter(null);
       setChapters([]);
     }
-  };
-
-  const getTimeLimit = () => {
-    if (totalMarks === 100) return "3 Hours";
-    if (totalMarks === 50) return "1 Hour 30 Mins";
-    return "45 Mins"; // 25 marks
+    setShowConfirm(false);
   };
 
   const getTrendIcon = (trend) => {
@@ -181,9 +170,9 @@ export default function TopicSelector({
             <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">✕</button>
           </div>
 
-          {/* Progress Steps */}
+          {/* Progress Steps - Only 2 steps now */}
           <div className="flex items-center gap-2">
-            {[1, 2, 3].map((s) => (
+            {[1, 2].map((s) => (
               <div key={s} className="flex items-center gap-2">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${s < step ? "bg-green-500 text-white" :
                   s === step ? "bg-purple-600 text-white" :
@@ -191,7 +180,7 @@ export default function TopicSelector({
                   }`}>
                   {s < step ? <CheckCircle className="w-4 h-4" /> : s}
                 </div>
-                {s < 3 && <div className={`w-12 h-1 rounded ${s < step ? "bg-green-500" : "bg-gray-200"}`} />}
+                {s < 2 && <div className={`w-12 h-1 rounded ${s < step ? "bg-green-500" : "bg-gray-200"}`} />}
               </div>
             ))}
           </div>
@@ -208,24 +197,35 @@ export default function TopicSelector({
               {/* Step 1: Subject Selection */}
               {step === 1 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {subjects.map((subject) => (
-                    <button
-                      key={subject.subject}
-                      onClick={() => handleSelectSubject(subject)}
-                      className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-100 hover:border-purple-300 transition-all text-left group"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <BookOpen className="w-8 h-8 text-purple-600 mb-3" />
-                          <h3 className="font-semibold text-gray-800 text-lg">{subject.subject}</h3>
-                          <p className="text-sm text-gray-500 mt-1">
-                            {subject.total_chapters} Chapters • {subject.total_questions} Questions
-                          </p>
+                  {subjects.length === 0 ? (
+                    <div className="col-span-2 text-center py-12">
+                      <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-600 mb-2">No Subjects Available</h3>
+                      <p className="text-sm text-gray-400">
+                        No content has been added for Class {classLevel} yet.
+                        <br />Please check back later or contact your teacher.
+                      </p>
+                    </div>
+                  ) : (
+                    subjects.map((subject) => (
+                      <button
+                        key={subject.subject}
+                        onClick={() => handleSelectSubject(subject)}
+                        className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-100 hover:border-purple-300 transition-all text-left group"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <BookOpen className="w-8 h-8 text-purple-600 mb-3" />
+                            <h3 className="font-semibold text-gray-800 text-lg">{subject.subject}</h3>
+                            <p className="text-sm text-gray-500 mt-1">
+                              {subject.total_chapters} Chapters • {subject.total_questions} Questions
+                            </p>
+                          </div>
+                          <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-purple-600" />
                         </div>
-                        <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-purple-600" />
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    ))
+                  )}
                 </div>
               )}
 
@@ -288,103 +288,71 @@ export default function TopicSelector({
                   </div>
                 </div>
               )}
-
-              {/* Step 3: Topic Selection */}
-              {step === 3 && (
-                <div className="space-y-8">
-                  <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100">
-                    <h3 className="font-semibold text-purple-900 mb-2">Selected Chapter</h3>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center font-bold text-purple-600 shadow-sm">
-                        {selectedChapter?.chapter_number}
-                      </div>
-                      <span className="text-lg text-gray-700">{selectedChapter?.chapter_name}</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Number of Questions */}
-                    <div className="space-y-3">
-                      <label className="text-sm font-medium text-gray-700">Number of Questions</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[10, 15, 20].map((num) => (
-                          <button
-                            key={num}
-                            onClick={() => setNumQuestions(num)}
-                            className={`py-3 px-4 rounded-xl font-medium border transition-all ${numQuestions === num
-                              ? "bg-purple-600 text-white border-purple-600 shadow-md"
-                              : "bg-white text-gray-600 border-gray-200 hover:border-purple-200 hover:bg-purple-50"
-                              }`}
-                          >
-                            {num}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Total Marks */}
-                    <div className="space-y-3">
-                      <label className="text-sm font-medium text-gray-700">Total Marks</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[25, 50, 100].map((marks) => (
-                          <button
-                            key={marks}
-                            onClick={() => setTotalMarks(marks)}
-                            className={`py-3 px-4 rounded-xl font-medium border transition-all ${totalMarks === marks
-                              ? "bg-purple-600 text-white border-purple-600 shadow-md"
-                              : "bg-white text-gray-600 border-gray-200 hover:border-purple-200 hover:bg-purple-50"
-                              }`}
-                          >
-                            {marks}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Time Limit Display */}
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white rounded-lg shadow-sm">
-                        <TrendingUp className="w-5 h-5 text-gray-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Estimated Duration</p>
-                        <p className="font-bold text-gray-900">{getTimeLimit()}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">Difficulty</p>
-                      <p className="font-bold text-gray-900 capitalize">{difficulty}</p>
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={handleStartTest}
-                    className="w-full py-6 text-lg bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-200"
-                  >
-                    Start Test
-                  </Button>
-                </div>
-              )}
             </>
           )}
         </div>
+
+        {/* Confirmation Modal */}
+        {showConfirm && selectedChapter && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Brain className="w-8 h-8 text-purple-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-800">Start Chapter Test</h3>
+                <p className="text-gray-500 mt-2">
+                  Chapter {selectedChapter.chapter_number}: {selectedChapter.chapter_name}
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 mb-6">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold text-purple-600">15</p>
+                    <p className="text-xs text-gray-500">Questions</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-purple-600">20</p>
+                    <p className="text-xs text-gray-500">Marks</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-purple-600">40</p>
+                    <p className="text-xs text-gray-500">Minutes</p>
+                  </div>
+                </div>
+                <div className="mt-4 pt-4 border-t border-purple-100">
+                  <p className="text-sm text-gray-600 text-center">
+                    <span className="font-medium">10 × 1 mark</span> + <span className="font-medium">5 × 2 marks</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowConfirm(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleStartTest}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white gap-2"
+                >
+                  <Brain className="w-4 h-4" />
+                  Start Test
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="p-6 border-t border-gray-100 flex justify-between">
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          {step === 3 && selectedTopic && (
-            <Button
-              onClick={handleStartTest}
-              className="bg-purple-600 hover:bg-purple-700 text-white gap-2"
-            >
-              <Brain className="w-4 h-4" />
-              Start Test ({numQuestions} questions)
-            </Button>
-          )}
         </div>
       </div>
     </div>

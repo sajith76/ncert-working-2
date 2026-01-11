@@ -61,12 +61,28 @@ export default function TestSession() {
 
       try {
         setIsLoading(true);
-        const newSession = await testService.startTestV2({
-          ...testConfig,
-          studentId: user?.id || user?.sub || "guest",
-          auto_generate: true
-        });
+
+        let newSession;
+
+        // Check if using new fixed-format chapter test
+        if (testConfig.use_chapter_test) {
+          newSession = await testService.startChapterTest({
+            studentId: user?.id || user?.sub || "guest",
+            classLevel: testConfig.class_level || user?.classLevel || 11,
+            subject: testConfig.subject,
+            chapterNumber: testConfig.chapter_number
+          });
+        } else {
+          // Legacy test start
+          newSession = await testService.startTestV2({
+            ...testConfig,
+            studentId: user?.id || user?.sub || "guest",
+            auto_generate: true
+          });
+        }
+
         setSession(newSession);
+        // Set timer from response (40 min for chapter test = 2400 seconds)
         setTimeRemaining(newSession.time_limit_minutes * 60);
       } catch (err) {
         console.error("Failed to start test:", err);

@@ -24,7 +24,8 @@ class MongoDB:
         """Initialize MongoDB connection."""
         try:
             self.client = AsyncIOMotorClient(settings.MONGO_URI)
-            self.db = self.client.ncert_learning
+            # Use ncert_learning_db to match the sync MongoDB (where books collection is stored)
+            self.db = self.client.ncert_learning_db
             
             # Test connection
             await self.client.admin.command('ping')

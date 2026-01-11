@@ -19,6 +19,9 @@ class ChatRequest(BaseModel):
     mode: Literal["define", "elaborate", "simple", "meaning", "story", "example", "summary"] = Field(
         ..., description="Explanation mode requested by student"
     )
+    # Optional fields for top questions tracking
+    user_id: Optional[str] = Field(None, description="User ID for tracking (optional)")
+    session_id: Optional[str] = Field(None, description="Session ID for tracking (optional)")
 
 
 class ChatResponse(BaseModel):

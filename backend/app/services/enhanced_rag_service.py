@@ -781,22 +781,23 @@ Generate a {'comprehensive' if mode == 'deepdive' else 'clear and focused'} answ
             source_chunks = textbook_chunks + llm_chunks
             return cached_answer, source_chunks
         
-        # 3. Query web content
-        web_chunks = self.query_web_content(
-            query_text=question,
-            subject=subject,
-            student_class=student_class,
-            top_k=3,
-            query_embedding=query_embedding
-        )
+        # 3. Query web content - DISABLED to save API calls
+        # web_chunks = self.query_web_content(
+        #     query_text=question,
+        #     subject=subject,
+        #     student_class=student_class,
+        #     top_k=3,
+        #     query_embedding=query_embedding
+        # )
+        web_chunks = []  # Web scraping disabled to reduce Gemini API usage
+        logger.info("🌐 Web content: DISABLED (saving API calls)")
         
-        # 4. Check if we need more content via web scraping
-        total_chunks = len(textbook_chunks) + len(web_chunks)
-        if self.web_scraper.should_scrape(total_chunks, threshold=5):
-            # Extract topic and trigger scraping
-            topic = self.llm_storage._extract_topic(question)
-            logger.info(f"🌐 Triggering web scraping for topic: {topic}")
-            self.web_scraper.scrape_topic(subject, topic, student_class, max_sources=2)
+        # 4. Web scraping trigger - DISABLED
+        # total_chunks = len(textbook_chunks) + len(web_chunks)
+        # if self.web_scraper.should_scrape(total_chunks, threshold=5):
+        #     topic = self.llm_storage._extract_topic(question)
+        #     logger.info(f"🌐 Triggering web scraping for topic: {topic}")
+        #     self.web_scraper.scrape_topic(subject, topic, student_class, max_sources=2)
         
         # Combine all sources
         all_chunks = textbook_chunks + llm_chunks + web_chunks
@@ -884,13 +885,15 @@ Generate a {'comprehensive' if mode == 'deepdive' else 'clear and focused'} answ
             source_chunks = textbook_chunks + llm_chunks
             return cached_answer, source_chunks
         
-        # 3. Query web content (optional)
-        web_chunks = self.query_web_content(
-            query_text=question,
-            subject=subject,
-            student_class=student_class,
-            top_k=2
-        )
+        # 3. Query web content - DISABLED to save API calls
+        # web_chunks = self.query_web_content(
+        #     query_text=question,
+        #     subject=subject,
+        #     student_class=student_class,
+        #     top_k=2
+        # )
+        web_chunks = []  # Web scraping disabled to reduce Gemini API usage
+        logger.info("🌐 Web content: DISABLED (saving API calls)")
         
         # EDGE CASE 1: No content found - Try progressive search (earlier classes)
         if not textbook_chunks and not llm_chunks:

@@ -733,12 +733,7 @@ async def get_lessons_for_student(
     try:
         from pinecone import Pinecone
         import random
-        
-        pc = Pinecone(api_key=settings.PINECONE_API_KEY)
-        index = pc.Index(
-            name=settings.PINECONE_MASTER_INDEX,
-            host=settings.PINECONE_MASTER_HOST
-        )
+        import time
         
         # Normalize subject to namespace format
         namespace = subject.lower().replace(' ', '_')
@@ -746,15 +741,36 @@ async def get_lessons_for_student(
         # Use random vector for querying (zero vector doesn't work well with cosine similarity)
         random_vec = [random.random() for _ in range(768)]
         
-        # Query Pinecone for vectors - get a good sample
-        query_response = index.query(
-            namespace=namespace,
-            vector=random_vec,
-            top_k=10000,
-            include_metadata=True
-        )
+        # Retry logic for Pinecone connection issues
+        max_retries = 3
+        query_response = None
         
-        matches = query_response.get("matches", [])
+        for attempt in range(max_retries):
+            try:
+                # Create fresh connection on each retry
+                pc = Pinecone(api_key=settings.PINECONE_API_KEY)
+                index = pc.Index(
+                    name=settings.PINECONE_MASTER_INDEX,
+                    host=settings.PINECONE_MASTER_HOST
+                )
+                
+                # Query Pinecone for vectors - get a good sample
+                query_response = index.query(
+                    namespace=namespace,
+                    vector=random_vec,
+                    top_k=10000,
+                    include_metadata=True
+                )
+                break  # Success, exit retry loop
+                
+            except Exception as conn_error:
+                if attempt < max_retries - 1:
+                    logger.warning(f"⚠️ Pinecone connection attempt {attempt + 1} failed, retrying in 2s...")
+                    time.sleep(2)
+                else:
+                    raise conn_error
+        
+        matches = query_response.get("matches", []) if query_response else []
         
         # Filter and group by chapter for this class level
         chapters_found = {}
@@ -863,10 +879,21 @@ async def serve_pdf(file_path: str):
     """
     Serve a book PDF file from organized folder structure.
     Path format: class_XX/subject/chapter_XX/filename.pdf
+    
+    Enhanced for PDF.js:
+    - Adds Accept-Ranges header for partial content support
+    - Adds CORS headers for cross-origin access
+    - Handles Unicode filenames properly
     """
+    from urllib.parse import unquote, quote
+    from starlette.responses import FileResponse as StarletteFileResponse
+    
     try:
+        # Decode URL-encoded path (for Hindi/Unicode filenames)
+        decoded_path = unquote(file_path)
+        
         # Build full file path
-        full_path = os.path.join(BOOKS_UPLOAD_DIR, file_path)
+        full_path = os.path.join(BOOKS_UPLOAD_DIR, decoded_path)
         
         # Security check: ensure path is within BOOKS_UPLOAD_DIR
         real_books_dir = os.path.realpath(BOOKS_UPLOAD_DIR)
@@ -877,23 +904,175 @@ async def serve_pdf(file_path: str):
         
         if not os.path.exists(full_path):
             logger.error(f"PDF not found: {full_path}")
-            raise HTTPException(status_code=404, detail=f"PDF not found: {file_path}")
+            raise HTTPException(status_code=404, detail=f"PDF not found: {decoded_path}")
         
         # Get filename for download
-        filename = os.path.basename(file_path)
+        filename = os.path.basename(decoded_path)
+        file_size = os.path.getsize(full_path)
         
-        logger.info(f"📄 Serving PDF: {file_path}")
+        logger.info(f"📄 Serving PDF: {decoded_path} ({file_size} bytes)")
         
-        return FileResponse(
+        # Create RFC 5987 encoded filename for Unicode support
+        # Format: filename*=UTF-8''encoded_filename
+        encoded_filename = quote(filename, safe='')
+        
+        # Build Content-Disposition with both ASCII fallback and UTF-8 version
+        content_disposition = f"inline; filename=\"document.pdf\"; filename*=UTF-8''{encoded_filename}"
+        
+        # Use Starlette's FileResponse for streaming (better for large files)
+        response = StarletteFileResponse(
             full_path,
             media_type="application/pdf",
-            filename=filename
+            headers={
+                "Content-Disposition": content_disposition,
+                "Accept-Ranges": "bytes",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+                "Cache-Control": "public, max-age=86400"
+            }
         )
+        
+        return response
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ Serve PDF failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pdf-page/{file_path:path}")
+async def render_pdf_page(file_path: str, page: int = 1, scale: float = 1.5):
+    """
+    Render a specific PDF page as a PNG image.
+    
+    Uses PyMuPDF (fitz) to render the page, which handles all image formats
+    including JPEG2000 that react-pdf cannot decode.
+    
+    Args:
+        file_path: Path to the PDF file (same format as serve_pdf)
+        page: Page number (1-indexed)
+        scale: Rendering scale/zoom factor (default 1.5 for good quality)
+    
+    Returns:
+        PNG image of the rendered page
+    """
+    import fitz  # PyMuPDF
+    from fastapi.responses import Response
+    from urllib.parse import unquote
+    import io
+    
+    try:
+        # Decode URL-encoded path (for Hindi/Unicode filenames)
+        decoded_path = unquote(file_path)
+        
+        # Build full file path
+        full_path = os.path.join(BOOKS_UPLOAD_DIR, decoded_path)
+        
+        # Security check: ensure path is within BOOKS_UPLOAD_DIR
+        real_books_dir = os.path.realpath(BOOKS_UPLOAD_DIR)
+        real_file_path = os.path.realpath(full_path)
+        
+        if not real_file_path.startswith(real_books_dir):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        if not os.path.exists(full_path):
+            logger.error(f"PDF not found for rendering: {full_path}")
+            raise HTTPException(status_code=404, detail=f"PDF not found: {decoded_path}")
+        
+        # Open PDF with PyMuPDF
+        doc = fitz.open(full_path)
+        
+        # Validate page number
+        if page < 1 or page > len(doc):
+            doc.close()
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid page number. PDF has {len(doc)} pages."
+            )
+        
+        # Get the page (0-indexed in fitz)
+        pdf_page = doc[page - 1]
+        
+        # Render page as image with the specified scale
+        # Higher scale = better quality but larger file
+        mat = fitz.Matrix(scale, scale)
+        pix = pdf_page.get_pixmap(matrix=mat, alpha=False)
+        
+        # Convert to PNG bytes
+        img_bytes = pix.tobytes("png")
+        
+        # Save page count before closing
+        num_pages = len(doc)
+        doc.close()
+        
+        logger.info(f"📄 Rendered PDF page {page}/{num_pages}: {decoded_path}")
+        
+        return Response(
+            content=img_bytes,
+            media_type="image/png",
+            headers={
+                "Cache-Control": "public, max-age=3600",  # Cache for 1 hour
+                "Access-Control-Allow-Origin": "*",
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Render PDF page failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pdf-info/{file_path:path}")
+async def get_pdf_info(file_path: str):
+    """
+    Get PDF metadata including total page count.
+    
+    Args:
+        file_path: Path to the PDF file
+    
+    Returns:
+        JSON with page count and other metadata
+    """
+    import fitz
+    from urllib.parse import unquote
+    
+    try:
+        # Decode URL-encoded path
+        decoded_path = unquote(file_path)
+        
+        # Build full file path
+        full_path = os.path.join(BOOKS_UPLOAD_DIR, decoded_path)
+        
+        # Security check
+        real_books_dir = os.path.realpath(BOOKS_UPLOAD_DIR)
+        real_file_path = os.path.realpath(full_path)
+        
+        if not real_file_path.startswith(real_books_dir):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        if not os.path.exists(full_path):
+            raise HTTPException(status_code=404, detail=f"PDF not found: {decoded_path}")
+        
+        # Open PDF and get info
+        doc = fitz.open(full_path)
+        
+        info = {
+            "numPages": len(doc),
+            "title": doc.metadata.get("title", "") or os.path.basename(decoded_path),
+            "author": doc.metadata.get("author", ""),
+            "subject": doc.metadata.get("subject", ""),
+        }
+        
+        doc.close()
+        
+        return info
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Get PDF info failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

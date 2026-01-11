@@ -47,3 +47,5 @@ sentencepiece>=0.1.99
 # Multilingual Support & API Optimization
 langdetect>=1.0.9
 easyocr>=1.7.0
+
+fitz

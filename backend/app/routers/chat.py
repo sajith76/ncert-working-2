@@ -10,6 +10,7 @@ from app.services.rag_service import rag_service
 from app.services.enhanced_rag_service import enhanced_rag_service
 from app.services.gemini_service import gemini_service
 from app.services.openvino_vision_service import get_openvino_vision_service
+from app.services.top_question_service import top_question_service
 import logging
 import numpy as np
 import cv2
@@ -35,6 +36,9 @@ async def chat(request: ChatRequest):
     **Modes:**
     - `define`: Clear definitions (quick mode - current + previous class)
     - `elaborate`: Detailed explanation with examples (quick mode)
+    
+    **Auto-tracking:** Questions and answers are automatically tracked for recommendations
+    when user_id and session_id are provided.
     """
     try:
         logger.info(f"Chat request: Class {request.class_level}, {request.subject}, Ch. {request.chapter}, Mode: {request.mode}")
@@ -47,6 +51,27 @@ async def chat(request: ChatRequest):
             chapter=request.chapter,
             mode="quick"  # Use quick mode (current + previous class)
         )
+        
+        # Track question-answer pair if user info provided (for top questions feature)
+        if request.user_id and request.session_id:
+            try:
+                # Determine mode for tracking (map chat modes to quick/deep)
+                tracking_mode = "deep" if request.mode in ["elaborate", "story", "example"] else "quick"
+                
+                top_question_service.save_question_answer(
+                    user_id=request.user_id,
+                    session_id=request.session_id,
+                    question=request.highlight_text,
+                    answer=answer,
+                    subject=request.subject,
+                    class_level=request.class_level,
+                    mode=tracking_mode,
+                    chapter=request.chapter
+                )
+                logger.info(f"✅ Question tracked for user {request.user_id}")
+            except Exception as track_error:
+                # Don't fail the request if tracking fails
+                logger.warning(f"⚠️ Failed to track question: {track_error}")
         
         return ChatResponse(
             answer=answer,

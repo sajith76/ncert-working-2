@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from app.services.optimized_rag_service import optimized_rag_service, api_tracker
+from app.services.top_question_service import top_question_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,9 @@ class OptimizedChatRequest(BaseModel):
     subject: str = Field(..., description="Subject name")
     mode: str = Field("quick", description="Mode: quick, deepdive, annotation, define")
     chapter: Optional[int] = Field(None, description="Optional chapter number")
+    # Optional fields for top questions tracking
+    user_id: Optional[str] = Field(None, description="User ID for tracking (optional)")
+    session_id: Optional[str] = Field(None, description="Session ID for tracking (optional)")
 
 
 class OptimizedChatResponse(BaseModel):
@@ -71,6 +75,9 @@ async def optimized_chat(request: OptimizedChatRequest):
     
     **Supports:** Hindi, Urdu, Tamil, Telugu, Bengali, Marathi, Gujarati,
                   Kannada, Malayalam, Punjabi, English
+    
+    **Auto-tracking:** Questions and answers are automatically tracked for recommendations
+    when user_id and session_id are provided.
     """
     try:
         logger.info(f"⚡ Optimized chat: '{request.question[:50]}...' | Class {request.class_level} {request.subject}")
@@ -82,6 +89,27 @@ async def optimized_chat(request: OptimizedChatRequest):
             mode=request.mode,
             chapter=request.chapter
         )
+        
+        # Track question-answer pair if user info provided (for top questions feature)
+        if request.user_id and request.session_id:
+            try:
+                # Map mode to quick/deep
+                tracking_mode = "deep" if request.mode in ["deepdive", "elaborate"] else "quick"
+                
+                top_question_service.save_question_answer(
+                    user_id=request.user_id,
+                    session_id=request.session_id,
+                    question=request.question,
+                    answer=result["answer"],
+                    subject=request.subject,
+                    class_level=request.class_level,
+                    mode=tracking_mode,
+                    chapter=request.chapter
+                )
+                logger.info(f"✅ Question tracked for user {request.user_id}")
+            except Exception as track_error:
+                # Don't fail the request if tracking fails
+                logger.warning(f"⚠️ Failed to track question: {track_error}")
         
         return OptimizedChatResponse(
             answer=result["answer"],
